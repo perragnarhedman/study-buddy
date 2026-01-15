@@ -8,20 +8,24 @@ final class AppStore: ObservableObject {
 
     @Published var messages: [ChatMessage] = []
     @Published var weeklyPlan: WeeklyPlan? = nil
+    @Published var bestNextActionFromChat: PlanItem? = nil
 
     private var api: APIClient { APIClient(baseURLString: baseURL) }
 
     func loadWeeklyPlan() async {
         if useStubData {
             weeklyPlan = Self.stubWeeklyPlan()
+            bestNextActionFromChat = nil
             return
         }
 
         do {
             weeklyPlan = try await api.fetchWeeklyPlan()
+            bestNextActionFromChat = nil
         } catch {
             // Fallback for MVP: show stub on failure.
             weeklyPlan = Self.stubWeeklyPlan()
+            bestNextActionFromChat = nil
         }
     }
 
@@ -51,6 +55,7 @@ final class AppStore: ObservableObject {
         if useStubData {
             let resp = Self.stubChatResponse(for: trimmed, currentPlan: weeklyPlan)
             updateMessageText(id: assistantId, newText: resp.assistantMessage.text)
+            bestNextActionFromChat = resp.bestNextAction
             if weeklyPlan == nil { weeklyPlan = Self.stubWeeklyPlan() }
             return
         }
@@ -58,10 +63,11 @@ final class AppStore: ObservableObject {
         do {
             let resp = try await api.sendChat(userMessage: trimmed, currentPlan: weeklyPlan)
             updateMessageText(id: assistantId, newText: resp.assistantMessage.text)
-            // If backend returns a best next action, we leave plan rendering to derived logic.
+            bestNextActionFromChat = resp.bestNextAction
         } catch {
             let resp = Self.stubChatResponse(for: trimmed, currentPlan: weeklyPlan)
             updateMessageText(id: assistantId, newText: resp.assistantMessage.text)
+            bestNextActionFromChat = resp.bestNextAction
         }
     }
 
@@ -71,6 +77,9 @@ final class AppStore: ObservableObject {
     }
 
     var bestNextAction: PlanItem? {
+        if let chatAction = bestNextActionFromChat {
+            return chatAction
+        }
         guard let plan = weeklyPlan else { return nil }
         return plan.items.first(where: { $0.status == .todo }) ?? plan.items.first
     }
