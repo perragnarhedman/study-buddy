@@ -19,5 +19,6 @@ DerivedData/
 *.xcscmblueprint
 *.swiftpm/
 .build/
+xcuserdata/
 
 
