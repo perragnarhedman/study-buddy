@@ -55,6 +55,27 @@ final class APIClient {
         let decoded = try JSONDecoder().decode(ChatSendResponse.self, from: data)
         return decoded
     }
+
+    func googleAuthStart() async throws -> GoogleAuthStartResponse {
+        let u = try url("auth/google/start")
+        var req = URLRequest(url: u)
+        req.httpMethod = "GET"
+        let (data, resp) = try await URLSession.shared.data(for: req)
+        guard let http = resp as? HTTPURLResponse else { throw APIError.badStatus(-1) }
+        guard (200..<300).contains(http.statusCode) else { throw APIError.badStatus(http.statusCode) }
+        return try JSONDecoder().decode(GoogleAuthStartResponse.self, from: data)
+    }
+
+    func fetchClassroomAssignments(sessionToken: String) async throws -> [Assignment] {
+        let u = try url("classroom/assignments")
+        var req = URLRequest(url: u)
+        req.httpMethod = "GET"
+        req.setValue("Bearer \(sessionToken)", forHTTPHeaderField: "Authorization")
+        let (data, resp) = try await URLSession.shared.data(for: req)
+        guard let http = resp as? HTTPURLResponse else { throw APIError.badStatus(-1) }
+        guard (200..<300).contains(http.statusCode) else { throw APIError.badStatus(http.statusCode) }
+        return try JSONDecoder().decode([Assignment].self, from: data)
+    }
 }
 
 

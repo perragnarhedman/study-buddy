@@ -3,8 +3,10 @@ import SwiftUI
 struct DebugSettingsView: View {
     @EnvironmentObject private var store: AppStore
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.openURL) private var openURL
 
     @State private var draftBaseURL: String = ""
+    @State private var authStatus: String? = nil
 
     var body: some View {
         NavigationStack {
@@ -16,6 +18,24 @@ struct DebugSettingsView: View {
                         .keyboardType(.URL)
 
                     Toggle("Use Stub Data", isOn: $store.useStubData)
+                }
+
+                Section("Google Classroom") {
+                    Button("Connect Google Classroom") {
+                        Task { await connectGoogle() }
+                    }
+                    .disabled(store.useStubData)
+
+                    if let count = store.classroomAssignmentsImported {
+                        Text("\(count) assignments imported")
+                            .foregroundStyle(.secondary)
+                    } else if let authStatus {
+                        Text(authStatus)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        Text("Not connected yet")
+                            .foregroundStyle(.secondary)
+                    }
                 }
 
                 Section("Tips") {
@@ -40,7 +60,25 @@ struct DebugSettingsView: View {
             }
             .onAppear {
                 draftBaseURL = store.baseURL
+                Task { await store.refreshClassroomAssignmentsImportedCount() }
             }
+        }
+    }
+
+    private func connectGoogle() async {
+        authStatus = "Opening Google sign-in…"
+        do {
+            store.baseURL = draftBaseURL.trimmingCharacters(in: .whitespacesAndNewlines)
+            let api = APIClient(baseURLString: store.baseURL)
+            let resp = try await api.googleAuthStart()
+            guard let url = URL(string: resp.authorizationURL) else {
+                authStatus = "Invalid auth URL"
+                return
+            }
+            authStatus = "Complete sign-in in Safari…"
+            openURL(url)
+        } catch {
+            authStatus = "Could not start auth"
         }
     }
 }

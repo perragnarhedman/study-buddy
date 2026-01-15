@@ -9,6 +9,10 @@ final class AppStore: ObservableObject {
     @Published var messages: [ChatMessage] = []
     @Published var weeklyPlan: WeeklyPlan? = nil
     @Published var bestNextActionFromChat: PlanItem? = nil
+    @Published var classroomAssignmentsImported: Int? = nil
+
+    private let sessionTokenKey = "studybuddy.sessionToken"
+    var sessionToken: String? { Keychain.getString(forKey: sessionTokenKey) }
 
     private var api: APIClient { APIClient(baseURLString: baseURL) }
 
@@ -26,6 +30,27 @@ final class AppStore: ObservableObject {
             // Fallback for MVP: show stub on failure.
             weeklyPlan = Self.stubWeeklyPlan()
             bestNextActionFromChat = nil
+        }
+    }
+
+    func saveSessionToken(_ token: String) {
+        Keychain.setString(token, forKey: sessionTokenKey)
+    }
+
+    func refreshClassroomAssignmentsImportedCount() async {
+        guard !useStubData else {
+            classroomAssignmentsImported = nil
+            return
+        }
+        guard let token = sessionToken else {
+            classroomAssignmentsImported = nil
+            return
+        }
+        do {
+            let assignments = try await api.fetchClassroomAssignments(sessionToken: token)
+            classroomAssignmentsImported = assignments.count
+        } catch {
+            classroomAssignmentsImported = nil
         }
     }
 

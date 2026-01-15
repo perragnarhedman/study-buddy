@@ -54,4 +54,24 @@ struct ChatSendResponse: Codable {
     }
 }
 
+struct Assignment: Codable, Equatable {
+    let id: String
+    let title: String
+    let dueDate: String?
+    let courseName: String
+    let description: String?
+    let url: String?
+    let estimatedMinutes: Int?
+}
+
+struct GoogleAuthStartResponse: Codable {
+    let authorizationURL: String
+    let state: String
+
+    enum CodingKeys: String, CodingKey {
+        case authorizationURL = "authorization_url"
+        case state
+    }
+}
+
 

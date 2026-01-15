@@ -1,0 +1,31 @@
+[
+  {
+    "id": "fx1",
+    "title": "Chemistry lab writeup",
+    "dueDate": "2026-01-20T17:00:00Z",
+    "courseName": "Chemistry",
+    "description": null,
+    "url": null,
+    "estimatedMinutes": 45
+  },
+  {
+    "id": "fx2",
+    "title": "Spanish vocab quiz prep",
+    "dueDate": "2026-01-19T17:00:00Z",
+    "courseName": "Spanish",
+    "description": null,
+    "url": null,
+    "estimatedMinutes": 30
+  },
+  {
+    "id": "fx3",
+    "title": "Literature: read pages 30–45",
+    "dueDate": null,
+    "courseName": "Literature",
+    "description": null,
+    "url": null,
+    "estimatedMinutes": 20
+  }
+]
+
+

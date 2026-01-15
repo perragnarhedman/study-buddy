@@ -21,4 +21,8 @@ DerivedData/
 .build/
 xcuserdata/
 
+## Local DB
+*.sqlite3
+*.sqlite3-*
+
 

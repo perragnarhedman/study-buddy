@@ -16,6 +16,14 @@ class Settings(BaseSettings):
     # (pydantic-settings treats List[...] as a "complex" type and expects JSON in env vars)
     cors_origins: str = "http://localhost:3000,http://127.0.0.1:3000"
 
+    # Phase 4/5
+    google_client_id: str = ""
+    google_client_secret: str = ""  # optional depending on OAuth client type
+    google_redirect_uri: str = ""
+    session_secret: str = ""
+    sqlite_path: str = "backend.sqlite3"
+    openai_api_key: str = ""
+
     def cors_origins_list(self) -> list[str]:
         return [s.strip() for s in self.cors_origins.split(",") if s.strip()]
 

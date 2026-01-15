@@ -11,6 +11,7 @@
 		111111111111111111111112 /* AppStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 222222222222222222222223 /* AppStore.swift */; };
 		111111111111111111111113 /* APIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 222222222222222222222224 /* APIClient.swift */; };
 		111111111111111111111114 /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = 222222222222222222222225 /* Models.swift */; };
+		11111111111111111111111B /* Keychain.swift in Sources */ = {isa = PBXBuildFile; fileRef = 222222222222222222222232 /* Keychain.swift */; };
 		111111111111111111111115 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 222222222222222222222226 /* RootView.swift */; };
 		111111111111111111111116 /* ChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 222222222222222222222227 /* ChatView.swift */; };
 		111111111111111111111117 /* PlanView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 222222222222222222222228 /* PlanView.swift */; };
@@ -26,6 +27,7 @@
 		222222222222222222222223 /* AppStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppStore.swift; sourceTree = "<group>"; };
 		222222222222222222222224 /* APIClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIClient.swift; sourceTree = "<group>"; };
 		222222222222222222222225 /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
+		222222222222222222222232 /* Keychain.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Keychain.swift; sourceTree = "<group>"; };
 		222222222222222222222226 /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
 		222222222222222222222227 /* ChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatView.swift; sourceTree = "<group>"; };
 		222222222222222222222228 /* PlanView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlanView.swift; sourceTree = "<group>"; };
@@ -61,6 +63,7 @@
 				222222222222222222222223 /* AppStore.swift */,
 				222222222222222222222224 /* APIClient.swift */,
 				222222222222222222222225 /* Models.swift */,
+				222222222222222222222232 /* Keychain.swift */,
 				444444444444444444444442 /* Views */,
 				222222222222222222222230 /* Assets.xcassets */,
 				444444444444444444444448 /* Preview Content */,
@@ -169,6 +172,7 @@
 				111111111111111111111112 /* AppStore.swift in Sources */,
 				111111111111111111111113 /* APIClient.swift in Sources */,
 				111111111111111111111114 /* Models.swift in Sources */,
+				11111111111111111111111B /* Keychain.swift in Sources */,
 				111111111111111111111115 /* RootView.swift in Sources */,
 				111111111111111111111116 /* ChatView.swift in Sources */,
 				111111111111111111111117 /* PlanView.swift in Sources */,

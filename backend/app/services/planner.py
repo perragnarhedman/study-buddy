@@ -43,15 +43,6 @@ def stub_assignments() -> list[Assignment]:
             url=None,
             estimatedMinutes=90,
         ),
-        Assignment(
-            id="a4",
-            title="Optional: review flashcards",
-            dueDate=None,
-            courseName="Biology",
-            description=None,
-            url=None,
-            estimatedMinutes=20,
-        ),
     ]
 
 

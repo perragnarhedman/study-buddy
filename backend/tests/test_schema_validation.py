@@ -1,6 +1,7 @@
 from fastapi.testclient import TestClient
 
 from app.main import app
+from app.core.config import get_settings
 from app.models.schemas import WeeklyPlan
 
 
@@ -12,6 +13,12 @@ def test_weekly_plan_schema() -> None:
 
 
 def test_chat_send_returns_best_next_action_and_mentions_it() -> None:
+    # Ensure OpenAI coaching doesn't run during tests.
+    import os
+
+    os.environ.pop("OPENAI_API_KEY", None)
+    get_settings.cache_clear()
+
     client = TestClient(app)
     payload = {
         "user_message": "Help me get started",
