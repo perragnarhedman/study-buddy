@@ -11,4 +11,13 @@ venv/
 dist/
 build/
 
+## Xcode / SwiftUI
+DerivedData/
+*.xcuserstate
+*.xcuserdata/
+*.xccheckout
+*.xcscmblueprint
+*.swiftpm/
+.build/
+
 

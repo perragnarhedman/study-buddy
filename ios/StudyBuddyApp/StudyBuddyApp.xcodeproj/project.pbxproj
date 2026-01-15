@@ -1,0 +1,287 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		111111111111111111111111 /* StudyBuddyAppApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 222222222222222222222222 /* StudyBuddyAppApp.swift */; };
+		111111111111111111111112 /* AppStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 222222222222222222222223 /* AppStore.swift */; };
+		111111111111111111111113 /* APIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 222222222222222222222224 /* APIClient.swift */; };
+		111111111111111111111114 /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = 222222222222222222222225 /* Models.swift */; };
+		111111111111111111111115 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 222222222222222222222226 /* RootView.swift */; };
+		111111111111111111111116 /* ChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 222222222222222222222227 /* ChatView.swift */; };
+		111111111111111111111117 /* PlanView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 222222222222222222222228 /* PlanView.swift */; };
+		111111111111111111111118 /* DebugSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 222222222222222222222229 /* DebugSettingsView.swift */; };
+		111111111111111111111119 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 222222222222222222222230 /* Assets.xcassets */; };
+		11111111111111111111111A /* Preview Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 222222222222222222222231 /* Preview Assets.xcassets */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		222222222222222222222220 /* StudyBuddyApp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = StudyBuddyApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		222222222222222222222221 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		222222222222222222222222 /* StudyBuddyAppApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StudyBuddyAppApp.swift; sourceTree = "<group>"; };
+		222222222222222222222223 /* AppStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppStore.swift; sourceTree = "<group>"; };
+		222222222222222222222224 /* APIClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIClient.swift; sourceTree = "<group>"; };
+		222222222222222222222225 /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
+		222222222222222222222226 /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
+		222222222222222222222227 /* ChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatView.swift; sourceTree = "<group>"; };
+		222222222222222222222228 /* PlanView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlanView.swift; sourceTree = "<group>"; };
+		222222222222222222222229 /* DebugSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebugSettingsView.swift; sourceTree = "<group>"; };
+		222222222222222222222230 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		222222222222222222222231 /* Preview Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = "Preview Assets.xcassets"; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		333333333333333333333333 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		444444444444444444444440 = {
+			isa = PBXGroup;
+			children = (
+				444444444444444444444441 /* StudyBuddyApp */,
+				444444444444444444444449 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		444444444444444444444441 /* StudyBuddyApp */ = {
+			isa = PBXGroup;
+			children = (
+				222222222222222222222221 /* Info.plist */,
+				222222222222222222222222 /* StudyBuddyAppApp.swift */,
+				222222222222222222222223 /* AppStore.swift */,
+				222222222222222222222224 /* APIClient.swift */,
+				222222222222222222222225 /* Models.swift */,
+				444444444444444444444442 /* Views */,
+				222222222222222222222230 /* Assets.xcassets */,
+				444444444444444444444448 /* Preview Content */,
+			);
+			path = StudyBuddyApp;
+			sourceTree = "<group>";
+		};
+		444444444444444444444442 /* Views */ = {
+			isa = PBXGroup;
+			children = (
+				222222222222222222222226 /* RootView.swift */,
+				222222222222222222222227 /* ChatView.swift */,
+				222222222222222222222228 /* PlanView.swift */,
+				222222222222222222222229 /* DebugSettingsView.swift */,
+			);
+			path = Views;
+			sourceTree = "<group>";
+		};
+		444444444444444444444448 /* Preview Content */ = {
+			isa = PBXGroup;
+			children = (
+				222222222222222222222231 /* Preview Assets.xcassets */,
+			);
+			path = "Preview Content";
+			sourceTree = "<group>";
+		};
+		444444444444444444444449 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				222222222222222222222220 /* StudyBuddyApp.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		555555555555555555555555 /* StudyBuddyApp */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 666666666666666666666666 /* Build configuration list for PBXNativeTarget "StudyBuddyApp" */;
+			buildPhases = (
+				777777777777777777777771 /* Sources */,
+				777777777777777777777772 /* Frameworks */,
+				777777777777777777777773 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = StudyBuddyApp;
+			productName = StudyBuddyApp;
+			productReference = 222222222222222222222220 /* StudyBuddyApp.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		888888888888888888888888 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 1500;
+				LastUpgradeCheck = 1500;
+				TargetAttributes = {
+					555555555555555555555555 = {
+						CreatedOnToolsVersion = 15.0;
+					};
+				};
+			};
+			buildConfigurationList = 666666666666666666666665 /* Build configuration list for PBXProject "StudyBuddyApp" */;
+			compatibilityVersion = "Xcode 15.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = 444444444444444444444440;
+			productRefGroup = 444444444444444444444449 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				555555555555555555555555 /* StudyBuddyApp */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		777777777777777777777773 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				111111111111111111111119 /* Assets.xcassets in Resources */,
+				11111111111111111111111A /* Preview Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		777777777777777777777771 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				111111111111111111111111 /* StudyBuddyAppApp.swift in Sources */,
+				111111111111111111111112 /* AppStore.swift in Sources */,
+				111111111111111111111113 /* APIClient.swift in Sources */,
+				111111111111111111111114 /* Models.swift in Sources */,
+				111111111111111111111115 /* RootView.swift in Sources */,
+				111111111111111111111116 /* ChatView.swift in Sources */,
+				111111111111111111111117 /* PlanView.swift in Sources */,
+				111111111111111111111118 /* DebugSettingsView.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		999999999999999999999991 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				DEVELOPMENT_TEAM = "";
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = StudyBuddyApp/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.example.StudyBuddyApp";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Debug;
+		};
+		999999999999999999999992 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = "";
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = StudyBuddyApp/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.example.StudyBuddyApp";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Release;
+		};
+		999999999999999999999993 /* Project Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_ENABLE_MODULES = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		999999999999999999999994 /* Project Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_ENABLE_MODULES = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		666666666666666666666665 /* Build configuration list for PBXProject "StudyBuddyApp" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				999999999999999999999993 /* Project Debug */,
+				999999999999999999999994 /* Project Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		666666666666666666666666 /* Build configuration list for PBXNativeTarget "StudyBuddyApp" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				999999999999999999999991 /* Debug */,
+				999999999999999999999992 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+
+	};
+	rootObject = 888888888888888888888888 /* Project object */;
+}
+
+
