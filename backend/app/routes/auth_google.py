@@ -66,9 +66,10 @@ def google_start() -> dict:
         "prompt": "consent",
     }
 
-    authorization_url = httpx.URL("https://accounts.google.com/o/oauth2/v2/auth").copy_add_params(
-        params
-    )
+    # httpx.URL supports copy_add_param (singular), not copy_add_params.
+    authorization_url = httpx.URL("https://accounts.google.com/o/oauth2/v2/auth")
+    for k, v in params.items():
+        authorization_url = authorization_url.copy_add_param(k, v)
 
     # Logging: high-level only, no secrets.
     print("oauth_start used_classroom=true")
