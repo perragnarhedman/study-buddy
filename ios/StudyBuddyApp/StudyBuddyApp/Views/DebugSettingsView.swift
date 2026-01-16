@@ -36,6 +36,36 @@ struct DebugSettingsView: View {
                         Text("Not connected yet")
                             .foregroundStyle(.secondary)
                     }
+
+                    if !store.classroomAssignments.isEmpty {
+                        VStack(alignment: .leading, spacing: 10) {
+                            Text("Latest assignment (preview)")
+                                .font(.subheadline)
+                                .fontWeight(.semibold)
+
+                            let a = store.classroomAssignments.first!
+                            Text(a.title)
+                                .font(.subheadline)
+
+                            if let desc = a.description, !desc.isEmpty {
+                                Text(desc)
+                                    .font(.footnote)
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(6)
+                            } else {
+                                Text("No instructions available for this assignment.")
+                                    .font(.footnote)
+                                    .foregroundStyle(.secondary)
+                            }
+
+                            if let urlStr = a.url, let url = URL(string: urlStr) {
+                                Button("Open in Classroom") {
+                                    openURL(url)
+                                }
+                            }
+                        }
+                        .padding(.top, 6)
+                    }
                 }
 
                 Section("Tips") {

@@ -19,7 +19,10 @@ struct StudyBuddyAppApp: App {
                     let token = comps.queryItems?.first(where: { $0.name == "token" })?.value
                     guard let token, !token.isEmpty else { return }
                     store.saveSessionToken(token)
-                    Task { await store.refreshClassroomAssignmentsImportedCount() }
+                    Task {
+                        await store.refreshClassroomAssignmentsImportedCount()
+                        await store.loadWeeklyPlan()
+                    }
                 }
         }
     }

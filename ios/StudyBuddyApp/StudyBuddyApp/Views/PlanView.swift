@@ -2,6 +2,7 @@ import SwiftUI
 
 struct PlanView: View {
     @EnvironmentObject private var store: AppStore
+    @State private var showInstructions = false
 
     var body: some View {
         ScrollView {
@@ -39,6 +40,21 @@ struct PlanView: View {
                 Text(action.title)
                     .font(.body)
                     .fontWeight(.semibold)
+
+                if let instructions = store.assignmentDescription(forSourceAssignmentId: action.sourceAssignmentId),
+                   !instructions.isEmpty
+                {
+                    Button(showInstructions ? "Hide instructions" : "Show instructions") {
+                        withAnimation(.easeInOut(duration: 0.15)) { showInstructions.toggle() }
+                    }
+                    .font(.subheadline)
+
+                    if showInstructions {
+                        Text(instructions)
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                }
 
                 HStack(spacing: 10) {
                     if let mins = action.estimatedMinutes {

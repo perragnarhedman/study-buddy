@@ -46,6 +46,9 @@ async def fetch_classroom_assignments(user_id: str) -> list[Assignment]:
             return out
     except httpx.RequestError:
         raise ConnectionError("google_unreachable")
+    except httpx.HTTPStatusError:
+        # Any other unexpected Google HTTP error should not crash the API.
+        raise ConnectionError("google_http_error")
 
 
 async def _refresh_access_token(user_id: str, refresh_token: str) -> str:
@@ -92,8 +95,9 @@ async def _list_courses(client: httpx.AsyncClient, access_token: str) -> list[di
         headers={"Authorization": f"Bearer {access_token}"},
         params={"courseStates": "ACTIVE"},
     )
-    if r.status_code == 401:
-        raise PermissionError("google_unauthorized")
+    if r.status_code in (401, 403):
+        # Upstream auth/scopes/api access issues -> treat as upstream failure (502).
+        raise ConnectionError(f"google_forbidden_{r.status_code}")
     r.raise_for_status()
     data = r.json()
     return data.get("courses", []) or []
@@ -106,7 +110,11 @@ async def _list_coursework(client: httpx.AsyncClient, access_token: str, course_
         params={"orderBy": "dueDate desc"},
     )
     if r.status_code == 401:
-        raise PermissionError("google_unauthorized")
+        raise ConnectionError("google_unauthorized")
+    if r.status_code == 403:
+        # Some courses may be inaccessible for coursework; skip rather than failing everything.
+        print("classroom_coursework_forbidden used_classroom=true")
+        return []
     # Some classes may have no coursework; Google returns 404 sometimes.
     if r.status_code == 404:
         return []

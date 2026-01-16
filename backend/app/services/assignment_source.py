@@ -20,6 +20,8 @@ async def select_assignments(user_id: Optional[str]) -> Tuple[list[Assignment], 
     if user_id:
         try:
             assignments = await fetch_classroom_assignments(user_id)
+            if not assignments:
+                raise RuntimeError("classroom_empty")
             print("assignments_source used_classroom=true used_fixture=false fallback_reason=none")
             return assignments, {"used_classroom": True, "used_fixture": False}
         except Exception:

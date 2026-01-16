@@ -84,3 +84,14 @@ def test_classroom_failure_uses_fixture(monkeypatch: pytest.MonkeyPatch) -> None
     assert meta["used_fixture"] is True
 
 
+def test_classroom_empty_uses_fixture(monkeypatch: pytest.MonkeyPatch) -> None:
+    async def fake_fetch(_user_id: str):
+        return []
+
+    monkeypatch.setattr(assignment_source_module, "fetch_classroom_assignments", fake_fetch)
+
+    assignments, meta = asyncio.run(assignment_source_module.select_assignments(user_id="u1"))
+    assert assignments
+    assert meta["used_fixture"] is True
+
+

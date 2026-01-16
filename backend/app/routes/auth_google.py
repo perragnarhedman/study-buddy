@@ -56,6 +56,8 @@ def google_start() -> dict:
                 "email",
                 "profile",
                 "https://www.googleapis.com/auth/classroom.courses.readonly",
+                # Needed to read teacher-assigned coursework as a student in many cases.
+                "https://www.googleapis.com/auth/classroom.coursework.students.readonly",
                 "https://www.googleapis.com/auth/classroom.coursework.me.readonly",
             ]
         ),

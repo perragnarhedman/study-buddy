@@ -10,9 +10,15 @@ final class AppStore: ObservableObject {
     @Published var weeklyPlan: WeeklyPlan? = nil
     @Published var bestNextActionFromChat: PlanItem? = nil
     @Published var classroomAssignmentsImported: Int? = nil
+    @Published var classroomAssignments: [Assignment] = []
 
     private let sessionTokenKey = "studybuddy.sessionToken"
     var sessionToken: String? { Keychain.getString(forKey: sessionTokenKey) }
+
+    func assignmentDescription(forSourceAssignmentId id: String?) -> String? {
+        guard let id, !id.isEmpty else { return nil }
+        return classroomAssignments.first(where: { $0.id == id })?.description
+    }
 
     private var api: APIClient { APIClient(baseURLString: baseURL) }
 
@@ -24,7 +30,7 @@ final class AppStore: ObservableObject {
         }
 
         do {
-            weeklyPlan = try await api.fetchWeeklyPlan()
+            weeklyPlan = try await api.fetchWeeklyPlan(sessionToken: sessionToken)
             bestNextActionFromChat = nil
         } catch {
             // Fallback for MVP: show stub on failure.
@@ -40,17 +46,21 @@ final class AppStore: ObservableObject {
     func refreshClassroomAssignmentsImportedCount() async {
         guard !useStubData else {
             classroomAssignmentsImported = nil
+            classroomAssignments = []
             return
         }
         guard let token = sessionToken else {
             classroomAssignmentsImported = nil
+            classroomAssignments = []
             return
         }
         do {
             let assignments = try await api.fetchClassroomAssignments(sessionToken: token)
             classroomAssignmentsImported = assignments.count
+            classroomAssignments = assignments
         } catch {
             classroomAssignmentsImported = nil
+            classroomAssignments = []
         }
     }
 
@@ -86,7 +96,7 @@ final class AppStore: ObservableObject {
         }
 
         do {
-            let resp = try await api.sendChat(userMessage: trimmed, currentPlan: weeklyPlan)
+            let resp = try await api.sendChat(userMessage: trimmed, currentPlan: weeklyPlan, sessionToken: sessionToken)
             updateMessageText(id: assistantId, newText: resp.assistantMessage.text)
             bestNextActionFromChat = resp.bestNextAction
         } catch {
