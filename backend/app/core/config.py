@@ -23,6 +23,9 @@ class Settings(BaseSettings):
     session_secret: str = ""
     sqlite_path: str = "backend.sqlite3"
     openai_api_key: str = ""
+    openai_model: str = "gpt-4.1-mini"
+    openai_timeout_seconds: float = 10.0
+    openai_enable_planner: bool = False
 
     def cors_origins_list(self) -> list[str]:
         return [s.strip() for s in self.cors_origins.split(",") if s.strip()]

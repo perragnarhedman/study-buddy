@@ -48,9 +48,23 @@ async def chat_send(
         user_msg = payload.user_message
         if assignment_description:
             user_msg = f"{user_msg}\n\nAssignment instructions:\n{assignment_description}"
-        text = await coach_text(user_msg, best_next_action.title, mins)
-        if best_next_action.title not in text:
-            text = f"{text}\n\nNext: {best_next_action.title}."
+        tasks_context = ""
+        if payload.current_plan and payload.current_plan.items:
+            # Keep it compact and non-sensitive: titles + due dates only.
+            lines = []
+            for it in payload.current_plan.items[:10]:
+                due = it.dueDate or ""
+                lines.append(f"- {it.title} {('(due ' + due + ')') if due else ''}".strip())
+            tasks_context = "\n".join(lines)
+
+        text = await coach_text(
+            user_msg,
+            best_next_action.title,
+            mins,
+            tasks_context=tasks_context,
+            plan_context="",
+            constraints_context="",
+        )
     except Exception:
         if assignment_description:
             text = (
@@ -59,6 +73,12 @@ async def chat_send(
             )
         else:
             text = coach_message_for_action(best_next_action)
+
+    # Option 4: keep post-processing minimal. If OpenAI misses the exact final line,
+    # append it rather than switching tone/template.
+    required_final_line = f"Next: {best_next_action.title}. Set a {mins}-minute timer and start."
+    if required_final_line not in text:
+        text = f"{text.rstrip()}\n\n{required_final_line}"
 
     assistant_message = ChatMessage(id=new_id(), role="assistant", text=text, timestamp=iso_now())
 

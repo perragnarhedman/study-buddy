@@ -3,6 +3,7 @@ from __future__ import annotations
 import httpx
 
 from app.core.config import get_settings
+from app.services.prompts import load_text, render_template
 
 
 OPENAI_BASE_URL = "https://api.openai.com/v1"
@@ -16,6 +17,7 @@ async def plan_week(assignments_json: str, week_start: str) -> str:
     if not settings.openai_api_key:
         raise RuntimeError("OPENAI_API_KEY missing")
 
+    # Planning prompt intentionally kept inline for now (scope: coaching-only prompt modularization).
     prompt = (
         "You are a study planner. Output ONLY valid JSON for WeeklyPlan with fields:\n"
         '{ "weekStart": "YYYY-MM-DD", "items": [ { "id": "string", "title": "string", '
@@ -29,12 +31,9 @@ async def plan_week(assignments_json: str, week_start: str) -> str:
     )
 
     headers = {"Authorization": f"Bearer {settings.openai_api_key}"}
-    payload = {
-        "model": "gpt-4.1-mini",
-        "input": prompt,
-    }
+    payload = {"model": settings.openai_model, "input": prompt}
 
-    async with httpx.AsyncClient(timeout=10.0) as client:
+    async with httpx.AsyncClient(timeout=settings.openai_timeout_seconds) as client:
         r = await client.post(f"{OPENAI_BASE_URL}/responses", json=payload, headers=headers)
         r.raise_for_status()
         data = r.json()
@@ -51,23 +50,42 @@ async def plan_week(assignments_json: str, week_start: str) -> str:
     return "\n".join(texts).strip()
 
 
-async def coach_text(user_message: str, best_next_action_title: str, minutes: int) -> str:
+async def coach_text(
+    user_message: str,
+    best_next_action_title: str,
+    minutes: int,
+    *,
+    tasks_context: str = "",
+    plan_context: str = "",
+    constraints_context: str = "",
+) -> str:
     settings = get_settings()
     if not settings.openai_api_key:
         raise RuntimeError("OPENAI_API_KEY missing")
 
-    prompt = (
-        "You are a supportive study coach. Keep it short (1-3 sentences).\n"
-        "You MUST include a concrete 10–20 minute starter for the next action.\n"
-        f"Next action: {best_next_action_title}.\n"
-        f"Starter duration: {minutes} minutes.\n"
-        f"Student message: {user_message}\n"
+    system_prompt_template = load_text("coach_system.txt")
+    system_prompt = render_template(
+        system_prompt_template,
+        {"minutes": str(minutes), "best_next_action_title": best_next_action_title},
     )
+    user_prompt_template = load_text("coach_user.txt")
+    user_prompt = render_template(
+        user_prompt_template,
+        {
+            "user_message": user_message,
+            "best_next_action_title": best_next_action_title,
+            "minutes": str(minutes),
+            "tasks_context": tasks_context,
+            "plan_context": plan_context,
+            "constraints_context": constraints_context,
+        },
+    )
+    prompt = f"{system_prompt}\n\n{user_prompt}\n"
 
     headers = {"Authorization": f"Bearer {settings.openai_api_key}"}
-    payload = {"model": "gpt-4.1-mini", "input": prompt}
+    payload = {"model": settings.openai_model, "input": prompt}
 
-    async with httpx.AsyncClient(timeout=10.0) as client:
+    async with httpx.AsyncClient(timeout=settings.openai_timeout_seconds) as client:
         r = await client.post(f"{OPENAI_BASE_URL}/responses", json=payload, headers=headers)
         r.raise_for_status()
         data = r.json()

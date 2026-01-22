@@ -19,7 +19,7 @@ async def generate_weekly_plan_with_fallback(
     assignments, src_meta = await select_assignments(user_id)
 
     settings = get_settings()
-    if settings.openai_api_key:
+    if settings.openai_api_key and settings.openai_enable_planner:
         try:
             raw = await plan_week(_assignments_json(assignments), week_start_iso(today))
             obj = json.loads(raw)

@@ -29,6 +29,7 @@ def test_openai_missing_uses_deterministic_planner() -> None:
 
 def test_llm_invalid_json_falls_back_to_deterministic(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    monkeypatch.setenv("OPENAI_ENABLE_PLANNER", "true")
     _reset_settings()
 
     async def fake_plan_week(*args, **kwargs) -> str:
@@ -43,6 +44,7 @@ def test_llm_invalid_json_falls_back_to_deterministic(monkeypatch: pytest.Monkey
 
 def test_llm_violates_rails_is_normalized(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    monkeypatch.setenv("OPENAI_ENABLE_PLANNER", "true")
     _reset_settings()
 
     bad = {
