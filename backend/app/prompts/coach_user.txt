@@ -1,26 +1,14 @@
 Student message:
 {user_message}
 
-Context you MAY have (optional; can be blank):
-- Student’s upcoming work / tasks (free text or JSON):
-{tasks_context}
+Plan item candidates (JSON array). Pick ONE by id:
+{plan_items_json}
 
-- Current plan / priorities (free text):
-{plan_context}
+Optional assignment instructions (may be empty):
+{assignment_instructions}
 
-- Any constraints (time available, energy, preferences, accommodations):
-{constraints_context}
-
-System-suggested next action title:
-{best_next_action_title}
-
-Suggested starter duration in minutes:
-{minutes}
-
-Write the reply now.
-
-Guidelines:
-- Sound like a helpful human. No fixed template, no bullet lists unless the student asked for it.
-- Be conversational. Use 1–3 sentences for the main reply.
-- Then output a final line EXACTLY:
-  Next: {best_next_action_title}. Set a {minutes}-minute timer and start.
+Output JSON only:
+{
+  "assistant_text": "...",
+  "selected_plan_item_id": "..."
+}

@@ -1,12 +1,32 @@
 from __future__ import annotations
 
+import json
+import re
 import httpx
 
 from app.core.config import get_settings
 from app.services.prompts import load_text, render_template
+from app.models.agent import CoachDecision
 
 
 OPENAI_BASE_URL = "https://api.openai.com/v1"
+
+_JSON_OBJ_RE = re.compile(r"\{[\s\S]*\}")
+
+
+def _parse_json_object_relaxed(text: str) -> dict:
+    """
+    Best-effort parse of a JSON object from model output.
+    Accepts code fences or extra surrounding text by extracting the outermost {...}.
+    """
+    text = text.strip()
+    # Strip common code fences.
+    if text.startswith("```"):
+        text = text.strip("`")
+    m = _JSON_OBJ_RE.search(text)
+    if not m:
+        raise ValueError("no_json_object_found")
+    return json.loads(m.group(0))
 
 
 async def plan_week(assignments_json: str, week_start: str) -> str:
@@ -17,7 +37,7 @@ async def plan_week(assignments_json: str, week_start: str) -> str:
     if not settings.openai_api_key:
         raise RuntimeError("OPENAI_API_KEY missing")
 
-    # Planning prompt intentionally kept inline for now (scope: coaching-only prompt modularization).
+    # Planning prompt: must return a WeeklyPlan JSON object.
     prompt = (
         "You are a study planner. Output ONLY valid JSON for WeeklyPlan with fields:\n"
         '{ "weekStart": "YYYY-MM-DD", "items": [ { "id": "string", "title": "string", '
@@ -50,34 +70,24 @@ async def plan_week(assignments_json: str, week_start: str) -> str:
     return "\n".join(texts).strip()
 
 
-async def coach_text(
-    user_message: str,
-    best_next_action_title: str,
-    minutes: int,
+async def coach_decide(
     *,
-    tasks_context: str = "",
-    plan_context: str = "",
-    constraints_context: str = "",
-) -> str:
+    user_message: str,
+    plan_items_json: str,
+    assignment_instructions: str,
+) -> CoachDecision:
     settings = get_settings()
     if not settings.openai_api_key:
         raise RuntimeError("OPENAI_API_KEY missing")
 
-    system_prompt_template = load_text("coach_system.txt")
-    system_prompt = render_template(
-        system_prompt_template,
-        {"minutes": str(minutes), "best_next_action_title": best_next_action_title},
-    )
+    system_prompt = load_text("coach_system.txt")
     user_prompt_template = load_text("coach_user.txt")
     user_prompt = render_template(
         user_prompt_template,
         {
             "user_message": user_message,
-            "best_next_action_title": best_next_action_title,
-            "minutes": str(minutes),
-            "tasks_context": tasks_context,
-            "plan_context": plan_context,
-            "constraints_context": constraints_context,
+            "plan_items_json": plan_items_json,
+            "assignment_instructions": assignment_instructions,
         },
     )
     prompt = f"{system_prompt}\n\n{user_prompt}\n"
@@ -98,6 +108,9 @@ async def coach_text(
                 texts.append(c["text"])
     if not texts:
         raise RuntimeError("OpenAI response missing text")
-    return "\n".join(texts).strip()
+
+    raw = "\n".join(texts).strip()
+    obj = _parse_json_object_relaxed(raw)
+    return CoachDecision.model_validate(obj)
 
 

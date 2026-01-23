@@ -6,6 +6,13 @@ struct ChatView: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            if let msg = store.chatErrorMessage {
+                Text(msg)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+            }
             messagesList
             Divider()
             inputBar

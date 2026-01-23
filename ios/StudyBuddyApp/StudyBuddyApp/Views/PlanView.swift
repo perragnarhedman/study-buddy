@@ -13,7 +13,10 @@ struct PlanView: View {
                     Text("This Week")
                         .font(.headline)
 
-                    if let plan = store.weeklyPlan {
+                    if let err = store.planErrorMessage {
+                        Text(err)
+                            .foregroundStyle(.secondary)
+                    } else if let plan = store.weeklyPlan {
                         ForEach(plan.items) { item in
                             PlanRow(item: item)
                         }

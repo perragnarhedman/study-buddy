@@ -11,6 +11,8 @@ final class AppStore: ObservableObject {
     @Published var bestNextActionFromChat: PlanItem? = nil
     @Published var classroomAssignmentsImported: Int? = nil
     @Published var classroomAssignments: [Assignment] = []
+    @Published var planErrorMessage: String? = nil
+    @Published var chatErrorMessage: String? = nil
 
     private let sessionTokenKey = "studybuddy.sessionToken"
     var sessionToken: String? { Keychain.getString(forKey: sessionTokenKey) }
@@ -26,16 +28,21 @@ final class AppStore: ObservableObject {
         if useStubData {
             weeklyPlan = Self.stubWeeklyPlan()
             bestNextActionFromChat = nil
+            planErrorMessage = nil
             return
         }
 
         do {
             weeklyPlan = try await api.fetchWeeklyPlan(sessionToken: sessionToken)
             bestNextActionFromChat = nil
+            planErrorMessage = nil
         } catch {
-            // Fallback for MVP: show stub on failure.
-            weeklyPlan = Self.stubWeeklyPlan()
             bestNextActionFromChat = nil
+            if let apiError = error as? APIError, case .serviceUnavailable = apiError {
+                planErrorMessage = "Coach service unavailable (OpenAI). Check backend OPENAI_API_KEY."
+            } else {
+                planErrorMessage = "Could not load plan. Check backend is running."
+            }
         }
     }
 
@@ -91,6 +98,7 @@ final class AppStore: ObservableObject {
             let resp = Self.stubChatResponse(for: trimmed, currentPlan: weeklyPlan)
             updateMessageText(id: assistantId, newText: resp.assistantMessage.text)
             bestNextActionFromChat = resp.bestNextAction
+            chatErrorMessage = nil
             if weeklyPlan == nil { weeklyPlan = Self.stubWeeklyPlan() }
             return
         }
@@ -99,10 +107,16 @@ final class AppStore: ObservableObject {
             let resp = try await api.sendChat(userMessage: trimmed, currentPlan: weeklyPlan, sessionToken: sessionToken)
             updateMessageText(id: assistantId, newText: resp.assistantMessage.text)
             bestNextActionFromChat = resp.bestNextAction
+            chatErrorMessage = nil
         } catch {
-            let resp = Self.stubChatResponse(for: trimmed, currentPlan: weeklyPlan)
-            updateMessageText(id: assistantId, newText: resp.assistantMessage.text)
-            bestNextActionFromChat = resp.bestNextAction
+            bestNextActionFromChat = nil
+            if let apiError = error as? APIError, case .serviceUnavailable = apiError {
+                chatErrorMessage = "Coach service unavailable (OpenAI)."
+                updateMessageText(id: assistantId, newText: "Coach service unavailable right now (OpenAI).")
+            } else {
+                chatErrorMessage = "Could not reach backend."
+                updateMessageText(id: assistantId, newText: "Could not reach backend.")
+            }
         }
     }
 

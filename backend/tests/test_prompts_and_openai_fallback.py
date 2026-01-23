@@ -14,7 +14,7 @@ def test_prompt_loader_reads_from_disk(tmp_path: Path) -> None:
     assert prompts_module.load_text("coach_system.txt", prompts_dir=tmp_path) == "SYSTEM"
 
 
-def test_chat_send_fallback_when_openai_missing_includes_action_and_timer() -> None:
+def test_chat_send_returns_503_when_openai_missing() -> None:
     os.environ.pop("OPENAI_API_KEY", None)
     get_settings.cache_clear()
 
@@ -38,12 +38,7 @@ def test_chat_send_fallback_when_openai_missing_includes_action_and_timer() -> N
             },
         },
     )
-    assert r.status_code == 200
-    body = r.json()
-    assert body["best_next_action"]["title"] == "Start Homework 1A: 15 min"
-    txt = body["assistant_message"]["text"]
-    assert "Start Homework 1A: 15 min" in txt
-    assert "Set a 15-minute timer" in txt
+    assert r.status_code == 503
 
 
 def test_prompts_can_format_without_missing_keys() -> None:
@@ -57,13 +52,14 @@ def test_prompts_can_format_without_missing_keys() -> None:
         load_text("coach_user.txt"),
         {
             "user_message": "Help me",
-            "tasks_context": "",
-            "plan_context": "",
-            "constraints_context": "",
-            "best_next_action_title": "Start Homework 1A: 15 min",
-            "minutes": "15",
+            "plan_items_json": "[]",
+            "assignment_instructions": "",
         },
     )
-    assert "Start Homework 1A: 15 min" in system + user
+    # Smoke check: placeholders were replaced and JSON braces didn't break templating.
+    assert "Help me" in user
+    assert "{plan_items_json}" not in user
+    assert "{assignment_instructions}" not in user
+    assert "Return ONLY valid JSON" in system
 
 

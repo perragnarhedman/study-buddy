@@ -4,6 +4,7 @@ enum APIError: Error {
     case invalidURL
     case badStatus(Int)
     case decodingFailed
+    case serviceUnavailable
 }
 
 final class APIClient {
@@ -38,6 +39,7 @@ final class APIClient {
         }
         let (data, resp) = try await URLSession.shared.data(for: req)
         guard let http = resp as? HTTPURLResponse else { throw APIError.badStatus(-1) }
+        if http.statusCode == 503 { throw APIError.serviceUnavailable }
         guard (200..<300).contains(http.statusCode) else { throw APIError.badStatus(http.statusCode) }
         return try JSONDecoder().decode(WeeklyPlan.self, from: data)
     }
@@ -56,6 +58,7 @@ final class APIClient {
 
         let (data, resp) = try await URLSession.shared.data(for: req)
         guard let http = resp as? HTTPURLResponse else { throw APIError.badStatus(-1) }
+        if http.statusCode == 503 { throw APIError.serviceUnavailable }
         guard (200..<300).contains(http.statusCode) else { throw APIError.badStatus(http.statusCode) }
         let decoded = try JSONDecoder().decode(ChatSendResponse.self, from: data)
         return decoded

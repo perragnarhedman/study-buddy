@@ -63,3 +63,18 @@ def test_planner_sorting_respects_due_date() -> None:
     assert plan.items[2].sourceAssignmentId == "none"
 
 
+def test_planner_uses_description_page_range_for_first_chunk() -> None:
+    a = Assignment(
+        id="p",
+        title="Reading assignment",
+        dueDate="2026-01-20",
+        courseName="Course",
+        description="Complete reading pages 34-64 before class.",
+        estimatedMinutes=None,
+    )
+    plan = generate_weekly_plan([a])
+    assert plan.items
+    assert "pages 34–42" in plan.items[0].title
+    assert all(i.estimatedMinutes == 15 for i in plan.items)
+
+

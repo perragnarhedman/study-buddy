@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from datetime import date, datetime
 from math import ceil
 from typing import Iterable, Optional
@@ -11,6 +12,9 @@ DEFAULT_CHUNK_MINUTES = 15
 MIN_CHUNK_MINUTES = 10
 MAX_CHUNK_MINUTES = 20
 MAX_PLAN_ITEMS = 15
+DEFAULT_PAGE_CHUNK_SIZE = 9
+
+_PAGE_RANGE_RE = re.compile(r"\bpages?\s*(\d+)\s*[-–]\s*(\d+)\b", re.IGNORECASE)
 
 
 def stub_assignments() -> list[Assignment]:
@@ -62,25 +66,53 @@ def generate_weekly_plan(
 
     items: list[PlanItem] = []
     for a in sorted_assignments:
-        parts = _split_minutes(a.estimatedMinutes)
-        total_parts = len(parts)
-        for part_idx, mins in enumerate(parts, start=1):
+        page_segments = _split_pages_from_description(a.description)
+        if page_segments and (a.estimatedMinutes is None):
+            # If Classroom doesn't provide estimatedMinutes, use page-based chunks at 15 min each.
+            mins = DEFAULT_CHUNK_MINUTES
+            total_parts = len(page_segments)
+            for part_idx, (p_start, p_end) in enumerate(page_segments, start=1):
+                if len(items) >= cap_items:
+                    break
+                title = _plan_item_title(
+                    a.title,
+                    mins,
+                    part_idx=part_idx,
+                    total_parts=total_parts,
+                    pages=(p_start, p_end),
+                )
+                items.append(
+                    PlanItem(
+                        id=new_id(),
+                        title=title,
+                        dueDate=a.dueDate,
+                        estimatedMinutes=mins,
+                        status="todo",
+                        sourceAssignmentId=a.id,
+                    )
+                )
+        else:
+            parts = _split_minutes(a.estimatedMinutes)
+            total_parts = len(parts)
+            for part_idx, mins in enumerate(parts, start=1):
+                if len(items) >= cap_items:
+                    break
+
+                title = _plan_item_title(
+                    a.title, mins, part_idx=part_idx, total_parts=total_parts, pages=None
+                )
+                items.append(
+                    PlanItem(
+                        id=new_id(),
+                        title=title,
+                        dueDate=a.dueDate,
+                        estimatedMinutes=mins,
+                        status="todo",
+                        sourceAssignmentId=a.id,
+                    )
+                )
             if len(items) >= cap_items:
                 break
-
-            title = _plan_item_title(
-                a.title, mins, part_idx=part_idx, total_parts=total_parts
-            )
-            items.append(
-                PlanItem(
-                    id=new_id(),
-                    title=title,
-                    dueDate=a.dueDate,
-                    estimatedMinutes=mins,
-                    status="todo",
-                    sourceAssignmentId=a.id,
-                )
-            )
         if len(items) >= cap_items:
             break
 
@@ -132,12 +164,18 @@ def _split_minutes(total: Optional[int]) -> list[int]:
 
 
 def _plan_item_title(
-    assignment_title: str, minutes: int, *, part_idx: int, total_parts: int
+    assignment_title: str,
+    minutes: int,
+    *,
+    part_idx: int,
+    total_parts: int,
+    pages: Optional[tuple[int, int]],
 ) -> str:
     # Keep actionable and consistent: “Start <assignment>: 15 min”
     # If split into multiple chunks, add (1/4) etc for clarity in UI.
     suffix = f" ({part_idx}/{total_parts})" if total_parts > 1 else ""
-    return f"Start {assignment_title}{suffix}: {minutes} min"
+    pages_part = f": pages {pages[0]}–{pages[1]}" if pages else ""
+    return f"Start {assignment_title}{suffix}{pages_part}: {minutes} min"
 
 
 def _due_date_sort_key(due_iso: Optional[str]) -> tuple[int, str]:
@@ -158,5 +196,28 @@ def _due_date_sort_key(due_iso: Optional[str]) -> tuple[int, str]:
 
 def _days_from_today_iso(days: int) -> str:
     return (date.today()).fromordinal(date.today().toordinal() + days).isoformat()
+
+
+def _split_pages_from_description(description: Optional[str]) -> list[tuple[int, int]]:
+    """
+    Extract the first page range in the description like "pages 34-64" and split into sensible chunks.
+    Example: 34-64 -> (34,42), (43,51), (52,60), (61,64)
+    """
+    if not description:
+        return []
+    m = _PAGE_RANGE_RE.search(description)
+    if not m:
+        return []
+    start = int(m.group(1))
+    end = int(m.group(2))
+    if end < start:
+        start, end = end, start
+    segments: list[tuple[int, int]] = []
+    p = start
+    while p <= end:
+        seg_end = min(p + DEFAULT_PAGE_CHUNK_SIZE - 1, end)
+        segments.append((p, seg_end))
+        p = seg_end + 1
+    return segments
 
 

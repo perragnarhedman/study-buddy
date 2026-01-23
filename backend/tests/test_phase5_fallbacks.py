@@ -12,24 +12,16 @@ def _reset_settings() -> None:
 
 
 def test_openai_missing_uses_deterministic_planner() -> None:
-    # Ensure OpenAI disabled.
-    try:
-        import os
+    import os
 
-        os.environ.pop("OPENAI_API_KEY", None)
-    except Exception:
-        pass
+    os.environ.pop("OPENAI_API_KEY", None)
     _reset_settings()
-
-    plan, meta = asyncio.run(planning_module.generate_weekly_plan_with_fallback(user_id=None))
-    assert meta["planner"] == "deterministic"
-    assert plan.items
-    assert plan.weekStart
+    with pytest.raises(Exception):
+        asyncio.run(planning_module.generate_weekly_plan_openai_required(user_id=None))
 
 
 def test_llm_invalid_json_falls_back_to_deterministic(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("OPENAI_API_KEY", "test-key")
-    monkeypatch.setenv("OPENAI_ENABLE_PLANNER", "true")
     _reset_settings()
 
     async def fake_plan_week(*args, **kwargs) -> str:
@@ -37,14 +29,12 @@ def test_llm_invalid_json_falls_back_to_deterministic(monkeypatch: pytest.Monkey
 
     monkeypatch.setattr(planning_module, "plan_week", fake_plan_week)
 
-    plan, meta = asyncio.run(planning_module.generate_weekly_plan_with_fallback(user_id=None))
-    assert meta["planner"] == "deterministic"
-    assert plan.items
+    with pytest.raises(Exception):
+        asyncio.run(planning_module.generate_weekly_plan_openai_required(user_id=None))
 
 
 def test_llm_violates_rails_is_normalized(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("OPENAI_API_KEY", "test-key")
-    monkeypatch.setenv("OPENAI_ENABLE_PLANNER", "true")
     _reset_settings()
 
     bad = {
@@ -69,7 +59,7 @@ def test_llm_violates_rails_is_normalized(monkeypatch: pytest.MonkeyPatch) -> No
 
     monkeypatch.setattr(planning_module, "plan_week", fake_plan_week)
 
-    plan, meta = asyncio.run(planning_module.generate_weekly_plan_with_fallback(user_id=None))
+    plan, meta = asyncio.run(planning_module.generate_weekly_plan_openai_required(user_id=None))
     assert meta["planner"] == "llm"
     assert len(plan.items) <= 15
     assert all(10 <= (i.estimatedMinutes or 0) <= 20 for i in plan.items)
