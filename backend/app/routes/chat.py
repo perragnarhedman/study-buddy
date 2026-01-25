@@ -24,9 +24,10 @@ from app.core.db import (
     set_last_selected_plan_item_id,
     upsert_user_state,
 )
-from app.services.openai_client import coach_decide
+from app.services.openai_client import build_coach_prompt, coach_decide
 from app.services.planning import generate_weekly_plan_openai_required
 from app.services.assignment_source import select_assignments
+from app.services.debug_export import export_chat_trace
 
 router = APIRouter()
 
@@ -199,6 +200,20 @@ async def chat_send(
 
     async def _call_coach(extra_note: str = ""):
         msg = user_text if not extra_note else f"{user_text}\n\nNOTE: {extra_note}"
+        prompt = build_coach_prompt(
+            user_message=msg,
+            plan_items_json=json.dumps(candidates, ensure_ascii=False),
+            assignment_instructions=assignment_instructions,
+            conversation_history=conversation_history,
+            user_state_json=user_state_json,
+        )
+        attempts.append(
+            {
+                "extra_note": extra_note,
+                "user_message_to_model": msg,
+                "prompt": prompt,
+            }
+        )
         return await coach_decide(
             user_message=msg,
             plan_items_json=json.dumps(candidates, ensure_ascii=False),
@@ -237,6 +252,7 @@ async def chat_send(
 
     # Call coach; if language mismatch, retry once with explicit correction.
     try:
+        attempts: list[dict] = []
         decision = await _call_coach()
         _validate_intent(decision)
         if decision.reply_language.lower() != lang_hint:
@@ -305,6 +321,35 @@ async def chat_send(
         set_last_selected_plan_item_id(user_id=user_id, plan_item_id=best_next_action.id, updated_at=now_ts)
 
     assistant_message = ChatMessage(id=new_id(), role="assistant", text=text, timestamp=iso_now())
+
+    # Debug export (best-effort).
+    try:
+        for a in attempts:
+            a["decision"] = {
+                "intent": getattr(decision, "intent", None),
+                "selected_plan_item_id": getattr(decision, "selected_plan_item_id", None),
+                "mark_done_plan_item_id": getattr(decision, "mark_done_plan_item_id", None),
+                "reply_language": getattr(decision, "reply_language", None),
+                "evidence": getattr(decision, "evidence", None),
+                "clarifying_question": getattr(decision, "clarifying_question", None),
+            }
+        export_chat_trace(
+            user_id=user_id,
+            payload={
+                "user_message": user_text,
+                "lang_hint": lang_hint,
+                "conversation_history": conversation_history,
+                "user_state_json": user_state_json,
+                "candidates": candidates,
+                "attempts": attempts,
+                "response": {
+                    "assistant_text": text,
+                    "best_next_action_id": best_next_action.id if best_next_action else None,
+                },
+            },
+        )
+    except Exception:
+        pass
 
     return ChatSendResponse(
         assistant_message=assistant_message,

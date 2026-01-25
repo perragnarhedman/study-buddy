@@ -116,3 +116,26 @@ async def coach_decide(
     return CoachDecision.model_validate(obj)
 
 
+def build_coach_prompt(
+    *,
+    user_message: str,
+    plan_items_json: str,
+    assignment_instructions: str,
+    conversation_history: str = "",
+    user_state_json: str = "",
+) -> str:
+    system_prompt = load_text("coach_system.txt")
+    user_prompt_template = load_text("coach_user.txt")
+    user_prompt = render_template(
+        user_prompt_template,
+        {
+            "user_message": user_message,
+            "plan_items_json": plan_items_json,
+            "assignment_instructions": assignment_instructions,
+            "conversation_history": conversation_history,
+            "user_state_json": user_state_json,
+        },
+    )
+    return f"{system_prompt}\n\n{user_prompt}\n"
+
+

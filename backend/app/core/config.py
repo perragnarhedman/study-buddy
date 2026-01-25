@@ -28,6 +28,10 @@ class Settings(BaseSettings):
     openai_timeout_seconds: float = 30.0
     openai_required: bool = True
 
+    # Debug export (chat trace + prompts)
+    debug_export_enabled: bool = False
+    debug_export_dir: str = "debug_exports"
+
     def cors_origins_list(self) -> list[str]:
         return [s.strip() for s in self.cors_origins.split(",") if s.strip()]
 
