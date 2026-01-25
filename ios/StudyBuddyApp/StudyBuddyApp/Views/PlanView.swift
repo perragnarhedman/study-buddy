@@ -59,6 +59,11 @@ struct PlanView: View {
                     }
                 }
 
+                if let url = store.assignmentURL(forSourceAssignmentId: action.sourceAssignmentId) {
+                    Link("Open link", destination: url)
+                        .font(.subheadline)
+                }
+
                 HStack(spacing: 10) {
                     if let mins = action.estimatedMinutes {
                         Label("\(mins) min", systemImage: "timer")

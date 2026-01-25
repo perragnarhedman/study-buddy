@@ -31,6 +31,17 @@ def _init(conn: sqlite3.Connection) -> None:
         )
         """
     )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS assignment_status (
+          user_id TEXT NOT NULL,
+          source_assignment_id TEXT NOT NULL,
+          status TEXT NOT NULL,
+          updated_at INTEGER NOT NULL,
+          PRIMARY KEY (user_id, source_assignment_id)
+        )
+        """
+    )
     conn.commit()
 
 
@@ -66,5 +77,29 @@ def get_tokens(user_id: str) -> Optional[dict]:
     conn = get_conn()
     row = conn.execute("SELECT * FROM oauth_tokens WHERE user_id=?", (user_id,)).fetchone()
     return dict(row) if row else None
+
+
+def set_assignment_status(*, user_id: str, source_assignment_id: str, status: str, updated_at: int) -> None:
+    conn = get_conn()
+    with conn:
+        conn.execute(
+            """
+            INSERT INTO assignment_status (user_id, source_assignment_id, status, updated_at)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(user_id, source_assignment_id) DO UPDATE SET
+              status=excluded.status,
+              updated_at=excluded.updated_at
+            """,
+            (user_id, source_assignment_id, status, updated_at),
+        )
+
+
+def get_assignment_status_map(*, user_id: str) -> dict[str, str]:
+    conn = get_conn()
+    rows = conn.execute(
+        "SELECT source_assignment_id, status FROM assignment_status WHERE user_id=?",
+        (user_id,),
+    ).fetchall()
+    return {str(r["source_assignment_id"]): str(r["status"]) for r in rows}
 
 

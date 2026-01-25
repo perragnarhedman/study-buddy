@@ -10,5 +10,6 @@ Optional assignment instructions (may be empty):
 Output JSON only:
 {
   "assistant_text": "...",
-  "selected_plan_item_id": "..."
+  "selected_plan_item_id": "...",
+  "mark_done_plan_item_id": null
 }

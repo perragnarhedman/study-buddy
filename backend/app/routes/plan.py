@@ -22,8 +22,6 @@ async def get_week_plan(user_id: Optional[str] = Depends(get_optional_user_id)) 
         raise
     except Exception:
         # High-level only; do not log secrets.
-        import traceback
-
         print("plan_week openai_required=true error=exception")
         raise HTTPException(status_code=503, detail="OpenAI unavailable")
 

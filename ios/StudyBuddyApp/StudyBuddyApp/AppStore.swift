@@ -13,6 +13,7 @@ final class AppStore: ObservableObject {
     @Published var classroomAssignments: [Assignment] = []
     @Published var planErrorMessage: String? = nil
     @Published var chatErrorMessage: String? = nil
+    @Published var chatInfoMessage: String? = nil
 
     private let sessionTokenKey = "studybuddy.sessionToken"
     var sessionToken: String? { Keychain.getString(forKey: sessionTokenKey) }
@@ -24,20 +25,35 @@ final class AppStore: ObservableObject {
 
     private var api: APIClient { APIClient(baseURLString: baseURL) }
 
-    func loadWeeklyPlan() async {
+    func loadWeeklyPlan(preserveChatAction: Bool = false) async {
         if useStubData {
             weeklyPlan = Self.stubWeeklyPlan()
-            bestNextActionFromChat = nil
+            if !preserveChatAction { bestNextActionFromChat = nil }
             planErrorMessage = nil
             return
         }
 
         do {
+            let prevDone = Set(weeklyPlan?.items.filter { $0.status == .done }.map { $0.sourceAssignmentId ?? "" } ?? [])
             weeklyPlan = try await api.fetchWeeklyPlan(sessionToken: sessionToken)
-            bestNextActionFromChat = nil
+            if !preserveChatAction { bestNextActionFromChat = nil }
             planErrorMessage = nil
+
+            // Simple confirmation feedback if something just became done.
+            let nextDone = Set(weeklyPlan?.items.filter { $0.status == .done }.map { $0.sourceAssignmentId ?? "" } ?? [])
+            if !prevDone.isEmpty || !nextDone.isEmpty {
+                let newDone = nextDone.subtracting(prevDone).filter { !$0.isEmpty }
+                if !newDone.isEmpty {
+                    chatInfoMessage = "Updated: marked as done in your plan."
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+                        if self.chatInfoMessage == "Updated: marked as done in your plan." {
+                            self.chatInfoMessage = nil
+                        }
+                    }
+                }
+            }
         } catch {
-            bestNextActionFromChat = nil
+            if !preserveChatAction { bestNextActionFromChat = nil }
             if let apiError = error as? APIError, case .serviceUnavailable = apiError {
                 planErrorMessage = "Coach service unavailable (OpenAI). Check backend OPENAI_API_KEY."
             } else {
@@ -108,6 +124,9 @@ final class AppStore: ObservableObject {
             updateMessageText(id: assistantId, newText: resp.assistantMessage.text)
             bestNextActionFromChat = resp.bestNextAction
             chatErrorMessage = nil
+
+            // Refresh plan to reflect any done-state changes the agent may have persisted.
+            await loadWeeklyPlan(preserveChatAction: true)
         } catch {
             bestNextActionFromChat = nil
             if let apiError = error as? APIError, case .serviceUnavailable = apiError {
@@ -118,6 +137,12 @@ final class AppStore: ObservableObject {
                 updateMessageText(id: assistantId, newText: "Could not reach backend.")
             }
         }
+    }
+
+    func assignmentURL(forSourceAssignmentId id: String?) -> URL? {
+        guard let id, !id.isEmpty else { return nil }
+        guard let raw = classroomAssignments.first(where: { $0.id == id })?.url else { return nil }
+        return URL(string: raw)
     }
 
     func updateMessageText(id: String, newText: String) {

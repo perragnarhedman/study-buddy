@@ -24,7 +24,8 @@ class Settings(BaseSettings):
     sqlite_path: str = "backend.sqlite3"
     openai_api_key: str = ""
     openai_model: str = "gpt-4.1-mini"
-    openai_timeout_seconds: float = 10.0
+    # Planning calls can take longer than coaching decisions; keep a generous default.
+    openai_timeout_seconds: float = 30.0
     openai_required: bool = True
 
     def cors_origins_list(self) -> list[str]:

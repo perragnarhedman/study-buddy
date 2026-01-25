@@ -131,6 +131,19 @@ def _normalize_coursework(coursework: list[dict], course_name: str) -> list[Assi
         due_iso = _due_iso(w.get("dueDate"), w.get("dueTime"))
         desc = w.get("description")
         url = w.get("alternateLink")
+        materials = _normalize_materials(w.get("materials"))
+
+        # Append attachments into description (schema stays stable).
+        desc_text = str(desc) if isinstance(desc, str) else None
+        if materials:
+            attachments_block = "\n".join([f"- {m['title']}: {m['url']}" for m in materials])
+            extra = f"\n\nAttachments:\n{attachments_block}\n"
+            desc_text = (desc_text or "")
+            desc_text = (desc_text + extra).strip()
+
+        # Prefer a direct attachment URL if present; otherwise keep the Classroom alternateLink.
+        if materials and isinstance(materials[0].get("url"), str):
+            url = materials[0]["url"]
         # Classroom doesn't provide estimated duration; leave None.
         out.append(
             Assignment(
@@ -138,12 +151,66 @@ def _normalize_coursework(coursework: list[dict], course_name: str) -> list[Assi
                 title=str(title),
                 dueDate=due_iso,
                 courseName=course_name,
-                description=str(desc) if isinstance(desc, str) else None,
+                description=desc_text,
                 url=str(url) if isinstance(url, str) else None,
                 estimatedMinutes=None,
             )
         )
     return out
+
+
+def _normalize_materials(materials: object) -> list[dict]:
+    """
+    Convert Google Classroom courseWork.materials[] into a small list of {title,url}.
+    We keep schema stable by embedding this in Assignment.description and picking a primary Assignment.url.
+    """
+    if not isinstance(materials, list):
+        return []
+    out: list[dict] = []
+    for m in materials:
+        if not isinstance(m, dict):
+            continue
+
+        # Link
+        link = m.get("link")
+        if isinstance(link, dict):
+            url = link.get("url")
+            title = link.get("title") or "Link"
+            if isinstance(url, str):
+                out.append({"title": str(title), "url": url})
+                continue
+
+        # Drive file
+        drive = m.get("driveFile")
+        if isinstance(drive, dict):
+            drive_file = drive.get("driveFile")
+            if isinstance(drive_file, dict):
+                url = drive_file.get("alternateLink") or drive_file.get("webViewLink")
+                title = drive_file.get("title") or "Drive file"
+                if isinstance(url, str):
+                    out.append({"title": str(title), "url": url})
+                    continue
+
+        # YouTube
+        yt = m.get("youtubeVideo")
+        if isinstance(yt, dict):
+            url = yt.get("alternateLink")
+            title = yt.get("title") or "YouTube"
+            if isinstance(url, str):
+                out.append({"title": str(title), "url": url})
+                continue
+
+        # Form
+        form = m.get("form")
+        if isinstance(form, dict):
+            url = form.get("formUrl")
+            title = form.get("title") or "Form"
+            if isinstance(url, str):
+                out.append({"title": str(title), "url": url})
+                continue
+
+    # Keep it small for prompt size.
+    return out[:5]
 
 
 def _due_iso(due_date: Optional[dict], due_time: Optional[dict]) -> Optional[str]:

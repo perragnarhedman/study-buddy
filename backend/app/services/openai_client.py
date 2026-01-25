@@ -43,9 +43,18 @@ async def plan_week(assignments_json: str, week_start: str) -> str:
         '{ "weekStart": "YYYY-MM-DD", "items": [ { "id": "string", "title": "string", '
         '"dueDate": "ISO8601 or null", "estimatedMinutes": 10-20, "status": "todo|doing|done", '
         '"sourceAssignmentId": "string or null" } ] }\n'
-        "Rules: max 15 items. Each estimatedMinutes between 10 and 20 inclusive.\n"
+        "Rules:\n"
+        "- max 15 items\n"
+        "- each estimatedMinutes between 10 and 20 inclusive\n"
+        "- status must be \"todo\" for all items\n"
+        "- ALWAYS set sourceAssignmentId to a valid assignment id from the input\n"
+        "- id format must be \"<sourceAssignmentId>-<n>\" starting at 1 (example: \"123-1\")\n"
         f"weekStart must be {week_start}.\n"
-        "Prefer titles: Start <assignment>: 15 min (optionally add (1/3) etc).\n"
+        "Selection rubric:\n"
+        "- prioritize due soon first, then smaller starters\n"
+        "- use assignment description (including any Attachments block) to break work into meaningful chunks\n"
+        "- if description includes page ranges (e.g. pages 34-64), start with an early subrange (e.g. pages 34-42)\n"
+        "- titles must be concrete and actionable; include what to do next (pages, questions, section name, open/read/write)\n"
         "Assignments JSON:\n"
         f"{assignments_json}\n"
     )
