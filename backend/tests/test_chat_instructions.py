@@ -37,7 +37,12 @@ def test_chat_instructions_includes_assignment_description(monkeypatch):
     async def fake_coach_decide(**kwargs) -> CoachDecision:
         # Ensure the assignment description flows into the candidate list.
         assert "Test material the students will use." in (kwargs.get("plan_items_json") or "")
-        return CoachDecision(assistant_text="Here you go.", selected_plan_item_id="p1", reply_language="en")
+        return CoachDecision(
+            assistant_text="Here you go.",
+            reply_language="en",
+            intent="recommend",
+            selected_plan_item_id="p1",
+        )
 
     monkeypatch.setattr(chat_route, "coach_decide", fake_coach_decide)
 

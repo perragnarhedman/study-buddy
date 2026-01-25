@@ -25,9 +25,10 @@ def test_chat_includes_recent_history_in_prompt(tmp_path, monkeypatch: pytest.Mo
         assert "user: Hej" in hist
         assert "assistant: Hej! Vad vill du jobba med?" in hist
         return CoachDecision(
+            reply_language="sv",
+            intent="continue",
             assistant_text="Bra, vi fortsätter.",
             selected_plan_item_id="p1",
-            reply_language="sv",
         )
 
     monkeypatch.setattr(chat_route, "coach_decide", fake_coach_decide)
@@ -38,7 +39,7 @@ def test_chat_includes_recent_history_in_prompt(tmp_path, monkeypatch: pytest.Mo
         "/chat/send",
         headers={"Authorization": f"Bearer {token}"},
         json={
-            "user_message": "Ok",
+            "user_message": "Okej",
             "current_plan": {
                 "weekStart": "2026-01-13",
                 "items": [

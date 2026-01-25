@@ -14,6 +14,7 @@ final class AppStore: ObservableObject {
     @Published var planErrorMessage: String? = nil
     @Published var chatErrorMessage: String? = nil
     @Published var chatInfoMessage: String? = nil
+    @Published var authErrorMessage: String? = nil
 
     private let sessionTokenKey = "studybuddy.sessionToken"
     var sessionToken: String? { Keychain.getString(forKey: sessionTokenKey) }
@@ -38,6 +39,7 @@ final class AppStore: ObservableObject {
             weeklyPlan = try await api.fetchWeeklyPlan(sessionToken: sessionToken)
             if !preserveChatAction { bestNextActionFromChat = nil }
             planErrorMessage = nil
+            authErrorMessage = nil
 
             // Simple confirmation feedback if something just became done.
             let nextDone = Set(weeklyPlan?.items.filter { $0.status == .done }.map { $0.sourceAssignmentId ?? "" } ?? [])
@@ -56,6 +58,9 @@ final class AppStore: ObservableObject {
             if !preserveChatAction { bestNextActionFromChat = nil }
             if let apiError = error as? APIError, case .serviceUnavailable = apiError {
                 planErrorMessage = "Coach service unavailable (OpenAI). Check backend OPENAI_API_KEY."
+            } else if let apiError = error as? APIError, case .unauthorized = apiError {
+                authErrorMessage = "Please sign in to use Study Buddy."
+                planErrorMessage = "Please sign in (Settings → Connect Google Classroom)."
             } else {
                 planErrorMessage = "Could not load plan. Check backend is running."
             }
@@ -81,7 +86,11 @@ final class AppStore: ObservableObject {
             let assignments = try await api.fetchClassroomAssignments(sessionToken: token)
             classroomAssignmentsImported = assignments.count
             classroomAssignments = assignments
+            authErrorMessage = nil
         } catch {
+            if let apiError = error as? APIError, case .unauthorized = apiError {
+                authErrorMessage = "Please sign in to use Study Buddy."
+            }
             classroomAssignmentsImported = nil
             classroomAssignments = []
         }
@@ -124,6 +133,7 @@ final class AppStore: ObservableObject {
             updateMessageText(id: assistantId, newText: resp.assistantMessage.text)
             bestNextActionFromChat = resp.bestNextAction
             chatErrorMessage = nil
+            authErrorMessage = nil
 
             // Refresh plan to reflect any done-state changes the agent may have persisted.
             await loadWeeklyPlan(preserveChatAction: true)
@@ -132,6 +142,10 @@ final class AppStore: ObservableObject {
             if let apiError = error as? APIError, case .serviceUnavailable = apiError {
                 chatErrorMessage = "Coach service unavailable (OpenAI)."
                 updateMessageText(id: assistantId, newText: "Coach service unavailable right now (OpenAI).")
+            } else if let apiError = error as? APIError, case .unauthorized = apiError {
+                authErrorMessage = "Please sign in to use Study Buddy."
+                chatErrorMessage = "Please sign in (Settings → Connect Google Classroom)."
+                updateMessageText(id: assistantId, newText: "Please sign in to continue (Settings → Connect Google Classroom).")
             } else {
                 chatErrorMessage = "Could not reach backend."
                 updateMessageText(id: assistantId, newText: "Could not reach backend.")

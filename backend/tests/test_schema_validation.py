@@ -11,6 +11,7 @@ from app.models.schemas import WeeklyPlan
 
 def test_weekly_plan_schema(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    monkeypatch.setenv("SESSION_SECRET", "test-secret")
     get_settings.cache_clear()
 
     import app.services.planning as planning_module
@@ -35,13 +36,17 @@ def test_weekly_plan_schema(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(planning_module, "plan_week", fake_plan_week)
 
     client = TestClient(app)
-    r = client.get("/plan/week")
+    from app.core.auth import issue_session_token
+
+    token = issue_session_token("u1")
+    r = client.get("/plan/week", headers={"Authorization": f"Bearer {token}"})
     assert r.status_code == 200
     WeeklyPlan.model_validate(r.json())
 
 
 def test_chat_send_returns_best_next_action_and_mentions_it(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    monkeypatch.setenv("SESSION_SECRET", "test-secret")
     get_settings.cache_clear()
 
     import app.routes.chat as chat_route
@@ -49,8 +54,9 @@ def test_chat_send_returns_best_next_action_and_mentions_it(monkeypatch: pytest.
     async def fake_coach_decide(**kwargs) -> CoachDecision:
         return CoachDecision(
             assistant_text="OK — let’s do English next.",
-            selected_plan_item_id="p1",
             reply_language="en",
+            intent="recommend",
+            selected_plan_item_id="p1",
         )
 
     monkeypatch.setattr(chat_route, "coach_decide", fake_coach_decide)
@@ -72,7 +78,10 @@ def test_chat_send_returns_best_next_action_and_mentions_it(monkeypatch: pytest.
             ],
         },
     }
-    r = client.post("/chat/send", json=payload)
+    from app.core.auth import issue_session_token
+
+    token = issue_session_token("u1")
+    r = client.post("/chat/send", headers={"Authorization": f"Bearer {token}"}, json=payload)
     assert r.status_code == 200
     body = r.json()
     assert body.get("best_next_action") is not None
@@ -82,6 +91,7 @@ def test_chat_send_returns_best_next_action_and_mentions_it(monkeypatch: pytest.
 
 def test_chat_send_respects_user_preference_for_subject(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    monkeypatch.setenv("SESSION_SECRET", "test-secret")
     get_settings.cache_clear()
 
     import app.routes.chat as chat_route
@@ -90,8 +100,9 @@ def test_chat_send_respects_user_preference_for_subject(monkeypatch: pytest.Monk
         # Model selects the English item when the user prefers it.
         return CoachDecision(
             assistant_text="Sure — let’s do English today.",
-            selected_plan_item_id="e1",
             reply_language="en",
+            intent="recommend",
+            selected_plan_item_id="e1",
         )
 
     monkeypatch.setattr(chat_route, "coach_decide", fake_coach_decide)
@@ -121,7 +132,10 @@ def test_chat_send_respects_user_preference_for_subject(monkeypatch: pytest.Monk
             ],
         },
     }
-    r = client.post("/chat/send", json=payload)
+    from app.core.auth import issue_session_token
+
+    token = issue_session_token("u1")
+    r = client.post("/chat/send", headers={"Authorization": f"Bearer {token}"}, json=payload)
     assert r.status_code == 200
     body = r.json()
     assert body["best_next_action"]["title"] == "Start English essay draft: 15 min"

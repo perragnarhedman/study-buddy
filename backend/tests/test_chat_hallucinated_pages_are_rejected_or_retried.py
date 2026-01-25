@@ -23,16 +23,18 @@ def test_chat_retries_when_model_mentions_ungrounded_pages(tmp_path, monkeypatch
             # Hallucinated pages not present in candidate -> should trigger retry.
             return CoachDecision(
                 assistant_text="Läs sidorna 45-48 och gör uppgift 4-5.",
-                selected_plan_item_id="p1",
                 reply_language="sv",
+                intent="recommend",
+                selected_plan_item_id="p1",
                 evidence=None,
             )
         # Retry note should be present.
         assert "Do not invent page numbers" in (kwargs.get("user_message") or "")
         return CoachDecision(
             assistant_text="Börja med att öppna dokumentet och hitta instruktionerna.",
-            selected_plan_item_id="p1",
             reply_language="sv",
+            intent="recommend",
+            selected_plan_item_id="p1",
             evidence=None,
         )
 

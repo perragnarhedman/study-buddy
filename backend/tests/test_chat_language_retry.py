@@ -22,15 +22,17 @@ def test_chat_retries_once_on_language_mismatch(tmp_path, monkeypatch: pytest.Mo
         if calls["n"] == 1:
             return CoachDecision(
                 assistant_text="Let's do algebra.",
-                selected_plan_item_id="p1",
                 reply_language="en",
+                intent="recommend",
+                selected_plan_item_id="p1",
             )
         # Retry should enforce Swedish
         assert "Reply language MUST be 'sv'" in (kwargs.get("user_message") or "")
         return CoachDecision(
             assistant_text="Okej, vi kör vidare.",
-            selected_plan_item_id="p1",
             reply_language="sv",
+            intent="recommend",
+            selected_plan_item_id="p1",
         )
 
     monkeypatch.setattr(chat_route, "coach_decide", fake_coach_decide)

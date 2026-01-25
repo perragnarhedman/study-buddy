@@ -57,11 +57,30 @@ def _init(conn: sqlite3.Connection) -> None:
         CREATE TABLE IF NOT EXISTS user_state (
           user_id TEXT PRIMARY KEY,
           last_selected_plan_item_id TEXT,
+          language_preference TEXT,
+          last_intent TEXT,
+          preferred_subject TEXT,
           updated_at INTEGER NOT NULL
         )
         """
     )
+    # Lightweight migrations for existing DBs.
+    _ensure_column(conn, "user_state", "language_preference", "TEXT")
+    _ensure_column(conn, "user_state", "last_intent", "TEXT")
+    _ensure_column(conn, "user_state", "preferred_subject", "TEXT")
     conn.commit()
+
+
+def _ensure_column(conn: sqlite3.Connection, table: str, col: str, col_type: str) -> None:
+    try:
+        rows = conn.execute(f"PRAGMA table_info({table})").fetchall()
+        existing = {r[1] for r in rows}  # 2nd field is name
+        if col in existing:
+            return
+        conn.execute(f"ALTER TABLE {table} ADD COLUMN {col} {col_type}")
+    except Exception:
+        # Best-effort only.
+        return
 
 
 def upsert_tokens(
@@ -184,5 +203,46 @@ def get_last_selected_plan_item_id(*, user_id: str) -> Optional[str]:
         return None
     v = row["last_selected_plan_item_id"]
     return str(v) if isinstance(v, str) and v else None
+
+
+def get_user_state(*, user_id: str) -> dict:
+    conn = get_conn()
+    row = conn.execute(
+        "SELECT last_selected_plan_item_id, language_preference, last_intent, preferred_subject FROM user_state WHERE user_id=?",
+        (user_id,),
+    ).fetchone()
+    if not row:
+        return {}
+    out = {
+        "last_selected_plan_item_id": row["last_selected_plan_item_id"],
+        "language_preference": row["language_preference"],
+        "last_intent": row["last_intent"],
+        "preferred_subject": row["preferred_subject"],
+    }
+    return {k: v for k, v in out.items() if v is not None and v != ""}
+
+
+def upsert_user_state(
+    *,
+    user_id: str,
+    language_preference: Optional[str] = None,
+    last_intent: Optional[str] = None,
+    preferred_subject: Optional[str] = None,
+    updated_at: int,
+) -> None:
+    conn = get_conn()
+    with conn:
+        conn.execute(
+            """
+            INSERT INTO user_state (user_id, last_selected_plan_item_id, language_preference, last_intent, preferred_subject, updated_at)
+            VALUES (?, NULL, ?, ?, ?, ?)
+            ON CONFLICT(user_id) DO UPDATE SET
+              language_preference=COALESCE(excluded.language_preference, user_state.language_preference),
+              last_intent=COALESCE(excluded.last_intent, user_state.last_intent),
+              preferred_subject=COALESCE(excluded.preferred_subject, user_state.preferred_subject),
+              updated_at=excluded.updated_at
+            """,
+            (user_id, language_preference, last_intent, preferred_subject, updated_at),
+        )
 
 

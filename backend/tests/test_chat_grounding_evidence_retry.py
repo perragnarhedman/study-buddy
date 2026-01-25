@@ -23,16 +23,18 @@ def test_chat_retries_when_evidence_is_ungrounded(tmp_path, monkeypatch: pytest.
             # Ungrounded evidence -> should trigger retry
             return CoachDecision(
                 assistant_text="Läs sidor 45–48 och gör 4–5.",
-                selected_plan_item_id="p1",
                 reply_language="sv",
+                intent="recommend",
+                selected_plan_item_id="p1",
                 evidence="pages 45-48",
             )
         # Retry must include the evidence correction note.
         assert "evidence must be a short exact quote" in (kwargs.get("user_message") or "")
         return CoachDecision(
             assistant_text="Börja med att öppna PDF:en och skumma första sidan.",
-            selected_plan_item_id="p1",
             reply_language="sv",
+            intent="recommend",
+            selected_plan_item_id="p1",
             evidence="skim the PDF",
         )
 

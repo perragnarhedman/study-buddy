@@ -16,11 +16,15 @@ def test_prompt_loader_reads_from_disk(tmp_path: Path) -> None:
 
 def test_chat_send_returns_503_when_openai_missing() -> None:
     os.environ.pop("OPENAI_API_KEY", None)
+    os.environ["SESSION_SECRET"] = "test-secret"
     get_settings.cache_clear()
+
+    from app.core.auth import issue_session_token
 
     client = TestClient(app)
     r = client.post(
         "/chat/send",
+        headers={"Authorization": f"Bearer {issue_session_token('u1')}"},
         json={
             "user_message": "Help me",
             "current_plan": {
@@ -55,6 +59,7 @@ def test_prompts_can_format_without_missing_keys() -> None:
             "plan_items_json": "[]",
             "assignment_instructions": "",
             "conversation_history": "",
+            "user_state_json": "{}",
         },
     )
     plan_user = render_template(

@@ -74,6 +74,7 @@ async def coach_decide(
     plan_items_json: str,
     assignment_instructions: str,
     conversation_history: str = "",
+    user_state_json: str = "",
 ) -> CoachDecision:
     settings = get_settings()
     if not settings.openai_api_key:
@@ -88,6 +89,7 @@ async def coach_decide(
             "plan_items_json": plan_items_json,
             "assignment_instructions": assignment_instructions,
             "conversation_history": conversation_history,
+            "user_state_json": user_state_json,
         },
     )
     prompt = f"{system_prompt}\n\n{user_prompt}\n"

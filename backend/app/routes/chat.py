@@ -1,5 +1,6 @@
 import json
 import time
+from datetime import datetime, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -12,14 +13,16 @@ from app.models.schemas import (
     iso_now,
     new_id,
 )
-from app.core.auth import get_optional_user_id
+from app.core.auth import AuthContext, require_user_id
 from app.core.db import (
     append_chat_history,
     get_assignment_status_map,
     get_chat_history,
     get_last_selected_plan_item_id,
+    get_user_state,
     set_assignment_status,
     set_last_selected_plan_item_id,
+    upsert_user_state,
 )
 from app.services.openai_client import coach_decide
 from app.services.planning import generate_weekly_plan_openai_required
@@ -37,9 +40,10 @@ def _require_openai() -> None:
 
 @router.post("/chat/send", response_model=ChatSendResponse)
 async def chat_send(
-    payload: ChatSendRequest, user_id: Optional[str] = Depends(get_optional_user_id)
+    payload: ChatSendRequest, ctx: AuthContext = Depends(require_user_id)
 ) -> ChatSendResponse:
     _require_openai()
+    user_id = ctx.user_id
 
     user_text = (payload.user_message or "").strip()
     if not user_text:
@@ -130,8 +134,8 @@ async def chat_send(
             if fname and fname not in hay:
                 raise HTTPException(status_code=502, detail="OpenAI mentioned ungrounded filename")
 
-    # If we have persisted status (requires auth), override current_plan statuses so we don't re-suggest done work.
-    if user_id and payload.current_plan and payload.current_plan.items:
+    # Override current_plan statuses so we don't re-suggest done work.
+    if payload.current_plan and payload.current_plan.items:
         status_map = get_assignment_status_map(user_id=user_id)
         if status_map:
             for it in plan_items:
@@ -139,30 +143,14 @@ async def chat_send(
                 if sid and sid in status_map:
                     it.status = status_map[sid]
 
-    assignments_by_id = {}
-    if user_id:
-        assignments, _meta = await select_assignments(user_id)
-        assignments_by_id = {a.id: a for a in assignments}
+    assignments, _meta = await select_assignments(user_id)
+    assignments_by_id = {a.id: a for a in assignments}
 
-    # If the student is just acknowledging (ok/yes/etc), prefer continuing the previous selection.
-    ack = user_text.lower() in {"ok", "okay", "sure", "yes", "yep", "yeah", "okej", "japp", "kör", "bra"}
-    # Treat "please answer in Swedish/English" as a meta instruction, not a new task request.
-    lang_request = False
-    ut = user_text.lower()
-    if "svenska" in ut or "på svenska" in ut or "in swedish" in ut:
-        lang_request = True
-    if "english" in ut or "på engelska" in ut or "in english" in ut:
-        lang_request = True
-    last_selected = get_last_selected_plan_item_id(user_id=user_id) if user_id else None
-
+    # Candidate list for the LLM (context packaging, not the decision).
+    # We keep it bounded for prompt size and filter done items.
+    last_selected = get_last_selected_plan_item_id(user_id=user_id)
     base_items = [it for it in plan_items if it.status != "done"]
-    if (ack or lang_request) and last_selected:
-        candidate_items = [it for it in base_items if it.id == last_selected][:1]
-        # If last_selected isn't in plan anymore, fall back to normal list.
-        if not candidate_items:
-            candidate_items = base_items[:12]
-    else:
-        candidate_items = base_items[:12]
+    candidate_items = base_items[:12]
 
     candidates = []
     for it in candidate_items:
@@ -170,6 +158,13 @@ async def chat_send(
         course_name = ""
         assignment_url = ""
         assignment_title = ""
+        due_soon = False
+        if isinstance(it.dueDate, str) and it.dueDate:
+            try:
+                dt = datetime.fromisoformat(it.dueDate.replace("Z", "+00:00"))
+                due_soon = (dt.date() - datetime.now(timezone.utc).date()).days <= 3
+            except Exception:
+                due_soon = False
         if it.sourceAssignmentId and it.sourceAssignmentId in assignments_by_id:
             a = assignments_by_id[it.sourceAssignmentId]
             assignment_title = a.title or ""
@@ -189,15 +184,18 @@ async def chat_send(
                 "courseName": course_name,
                 "assignmentTitle": assignment_title,
                 "url": assignment_url,
+                "status": it.status,
+                "is_last_selected": bool(last_selected and it.id == last_selected),
+                "is_due_soon": due_soon,
             }
         )
 
     assignment_instructions = ""
     conversation_history = ""
-    if user_id:
-        hist = get_chat_history(user_id=user_id, limit=10)
-        # simple text format the model can follow
-        conversation_history = "\n".join([f"{h['role']}: {h['text']}" for h in hist])
+    hist = get_chat_history(user_id=user_id, limit=10)
+    # simple text format the model can follow
+    conversation_history = "\n".join([f"{h['role']}: {h['text']}" for h in hist])
+    user_state_json = json.dumps(get_user_state(user_id=user_id), ensure_ascii=False)
 
     async def _call_coach(extra_note: str = ""):
         msg = user_text if not extra_note else f"{user_text}\n\nNOTE: {extra_note}"
@@ -206,15 +204,46 @@ async def chat_send(
             plan_items_json=json.dumps(candidates, ensure_ascii=False),
             assignment_instructions=assignment_instructions,
             conversation_history=conversation_history,
+            user_state_json=user_state_json,
         )
+
+    def _validate_intent(decision) -> None:
+        intent = getattr(decision, "intent", None)
+        sid = getattr(decision, "selected_plan_item_id", None)
+        md = getattr(decision, "mark_done_plan_item_id", None)
+        cq = getattr(decision, "clarifying_question", None)
+
+        if intent not in ("overview", "recommend", "continue", "clarify", "mark_done"):
+            raise HTTPException(status_code=502, detail="OpenAI returned invalid intent")
+
+        if intent in ("recommend", "continue"):
+            if not isinstance(sid, str) or not sid:
+                raise HTTPException(status_code=502, detail="OpenAI missing selected_plan_item_id")
+            if md is not None:
+                raise HTTPException(status_code=502, detail="OpenAI returned unexpected mark_done_plan_item_id")
+        elif intent == "mark_done":
+            if not isinstance(sid, str) or not sid:
+                raise HTTPException(status_code=502, detail="OpenAI missing selected_plan_item_id")
+            if not isinstance(md, str) or not md:
+                raise HTTPException(status_code=502, detail="OpenAI missing mark_done_plan_item_id")
+        elif intent == "clarify":
+            if not isinstance(cq, str) or not cq.strip():
+                raise HTTPException(status_code=502, detail="OpenAI missing clarifying_question")
+            if sid is not None or md is not None:
+                raise HTTPException(status_code=502, detail="OpenAI returned unexpected ids for clarify")
+        elif intent == "overview":
+            if sid is not None or md is not None:
+                raise HTTPException(status_code=502, detail="OpenAI returned unexpected ids for overview")
 
     # Call coach; if language mismatch, retry once with explicit correction.
     try:
         decision = await _call_coach()
-        if decision.reply_language and decision.reply_language.lower() != lang_hint:
+        _validate_intent(decision)
+        if decision.reply_language.lower() != lang_hint:
             decision = await _call_coach(f"Reply language MUST be '{lang_hint}'. Set reply_language='{lang_hint}'.")
-        # Grounding validation; retry once if it fails due to evidence.
+        # Intent + grounding validation; retry once if it fails.
         try:
+            _validate_intent(decision)
             _validate_evidence(decision, candidates)
             _validate_no_hallucinated_details(decision, candidates)
         except HTTPException:
@@ -223,6 +252,7 @@ async def chat_send(
                 "Do not invent page numbers, exercises, or file contents. "
                 "If you didn't cite specifics, set evidence=null."
             )
+            _validate_intent(decision)
             _validate_evidence(decision, candidates)
             _validate_no_hallucinated_details(decision, candidates)
     except HTTPException:
@@ -236,19 +266,25 @@ async def chat_send(
         print(f"chat_send openai_error={type(e).__name__}")
         raise HTTPException(status_code=503, detail="OpenAI unavailable")
 
-    candidate_ids = {it.id for it in candidate_items}
-    if decision.selected_plan_item_id not in candidate_ids:
-        raise HTTPException(status_code=502, detail="OpenAI returned invalid selection")
-    selected = next((it for it in plan_items if it.id == decision.selected_plan_item_id), None)
-    if selected is None:
-        raise HTTPException(status_code=502, detail="OpenAI returned invalid selection")
+    intent = decision.intent
+    best_next_action = None
+    selected = None
+
+    if intent in ("recommend", "continue", "mark_done"):
+        candidate_ids = {it.id for it in candidate_items}
+        if decision.selected_plan_item_id not in candidate_ids:
+            raise HTTPException(status_code=502, detail="OpenAI returned invalid selection")
+        selected = next((it for it in plan_items if it.id == decision.selected_plan_item_id), None)
+        if selected is None:
+            raise HTTPException(status_code=502, detail="OpenAI returned invalid selection")
+        best_next_action = selected
 
     # Optional: persist done status.
-    if decision.mark_done_plan_item_id:
+    if intent == "mark_done":
         done_item = next((it for it in plan_items if it.id == decision.mark_done_plan_item_id), None)
         if done_item is None:
             raise HTTPException(status_code=502, detail="OpenAI returned invalid mark_done_plan_item_id")
-        if user_id and done_item.sourceAssignmentId:
+        if done_item.sourceAssignmentId:
             set_assignment_status(
                 user_id=user_id,
                 source_assignment_id=done_item.sourceAssignmentId,
@@ -260,12 +296,12 @@ async def chat_send(
     if not text:
         raise HTTPException(status_code=502, detail="OpenAI returned empty response")
 
-    best_next_action = selected
     now_ts = int(time.time())
-    if user_id:
-        # Update conversation memory + last selection.
-        append_chat_history(user_id=user_id, role="user", text=user_text[:1200], created_at=now_ts)
-        append_chat_history(user_id=user_id, role="assistant", text=text[:1200], created_at=now_ts + 1)
+    # Update conversation memory + user state.
+    append_chat_history(user_id=user_id, role="user", text=user_text[:1200], created_at=now_ts)
+    append_chat_history(user_id=user_id, role="assistant", text=text[:1200], created_at=now_ts + 1)
+    upsert_user_state(user_id=user_id, language_preference=decision.reply_language, last_intent=intent, updated_at=now_ts)
+    if best_next_action is not None:
         set_last_selected_plan_item_id(user_id=user_id, plan_item_id=best_next_action.id, updated_at=now_ts)
 
     assistant_message = ChatMessage(id=new_id(), role="assistant", text=text, timestamp=iso_now())

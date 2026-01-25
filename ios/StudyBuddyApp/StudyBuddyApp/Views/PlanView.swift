@@ -13,7 +13,10 @@ struct PlanView: View {
                     Text("This Week")
                         .font(.headline)
 
-                    if let err = store.planErrorMessage {
+                    if let auth = store.authErrorMessage {
+                        Text(auth)
+                            .foregroundStyle(.secondary)
+                    } else if let err = store.planErrorMessage {
                         Text(err)
                             .foregroundStyle(.secondary)
                     } else if let plan = store.weeklyPlan {

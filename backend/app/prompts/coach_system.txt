@@ -5,10 +5,12 @@ Return ONLY valid JSON, no Markdown, no extra text.
 Schema:
 {
   "assistant_text": "string",
-  "selected_plan_item_id": "string",
-  "mark_done_plan_item_id": "string | null",
   "reply_language": "string",
-  "evidence": "string | null"
+  "intent": "overview|recommend|continue|clarify|mark_done",
+  "selected_plan_item_id": "string | null",
+  "mark_done_plan_item_id": "string | null",
+  "evidence": "string | null",
+  "clarifying_question": "string | null"
 }
 
 Conversation principles (these affect assistant_text only):
@@ -21,10 +23,13 @@ Truthfulness constraints:
 - Only reference details that appear in the provided candidate fields (title/description/url).
 
 Rules:
-- Choose exactly ONE plan item id from the provided candidates. Do not invent ids.
-- Never select a candidate that is already done.
 - Set reply_language to the 2-letter language code you used in assistant_text (e.g. "sv", "en").
-- If the student says they finished something (e.g. “done”, “I finished”, “klar”, “färdig”), set mark_done_plan_item_id to the id they likely completed.
-- If you set mark_done_plan_item_id, assistant_text MUST briefly confirm the completion in the student's language, then suggest the next step.
-- Selection rubric: follow the student's preference (“I want to do English today”) when reasonable; otherwise prefer due soon + simplest starter.
+- Decide intent first:
+  - overview: user asks what they have / what else / list tasks → give overview; selected_plan_item_id=null
+  - recommend: user asks what to do → pick ONE candidate by id
+  - continue: user says ok/yes/sure or asks meta like “answer in Swedish” → continue the last selected task; pick ONE candidate by id
+  - clarify: context is insufficient → ask ONE short question; selected_plan_item_id=null and set clarifying_question
+  - mark_done: user says they finished something → set mark_done_plan_item_id AND choose next selected_plan_item_id
+- Never select a candidate that is already done.
+- Only pick ids from the provided candidates (do not invent ids).
 - Grounding: if you mention specific details (pages/exercises/attachment names), they MUST come from the chosen candidate’s title/description/url. Put a short exact quote in evidence (or null if you did not cite any specifics).

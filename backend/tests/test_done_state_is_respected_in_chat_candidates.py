@@ -24,7 +24,7 @@ def test_chat_does_not_offer_done_items_as_candidates(tmp_path, monkeypatch: pyt
         # Ensure the done item isn't offered to the model.
         plan_items_json = kwargs.get("plan_items_json") or ""
         assert '"sourceAssignmentId": "a1"' not in plan_items_json
-        return CoachDecision(assistant_text="OK", selected_plan_item_id="a2-1", reply_language="en")
+        return CoachDecision(assistant_text="OK", reply_language="en", intent="recommend", selected_plan_item_id="a2-1")
 
     monkeypatch.setattr(chat_route, "coach_decide", fake_coach_decide)
 

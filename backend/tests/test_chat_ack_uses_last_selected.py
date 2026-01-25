@@ -20,14 +20,17 @@ def test_chat_ack_restricts_candidates_to_last_selected(tmp_path, monkeypatch: p
     import app.routes.chat as chat_route
 
     async def fake_coach_decide(**kwargs) -> CoachDecision:
-        # Candidate list should only include a2-1 when user says "Ok".
+        # Server provides candidates + metadata; LLM should choose last-selected when user acknowledges.
         pj = kwargs.get("plan_items_json") or ""
         assert '"id": "a2-1"' in pj
-        assert '"id": "a1-1"' not in pj
+        assert '"id": "a1-1"' in pj
+        assert '"is_last_selected": true' in pj
+        assert '"last_selected_plan_item_id": "a2-1"' in (kwargs.get("user_state_json") or "")
         return CoachDecision(
-            assistant_text="Okej, vi fortsätter med matte.",
-            selected_plan_item_id="a2-1",
             reply_language="sv",
+            intent="continue",
+            assistant_text="Okej — vi fortsätter med matte.",
+            selected_plan_item_id="a2-1",
         )
 
     monkeypatch.setattr(chat_route, "coach_decide", fake_coach_decide)
@@ -38,7 +41,7 @@ def test_chat_ack_restricts_candidates_to_last_selected(tmp_path, monkeypatch: p
         "/chat/send",
         headers={"Authorization": f"Bearer {token}"},
         json={
-            "user_message": "Ok",
+            "user_message": "Okej",
             "current_plan": {
                 "weekStart": "2026-01-19",
                 "items": [

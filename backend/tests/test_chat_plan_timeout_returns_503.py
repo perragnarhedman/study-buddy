@@ -1,12 +1,14 @@
 import pytest
 from fastapi.testclient import TestClient
 
+from app.core.auth import issue_session_token
 from app.core.config import get_settings
 from app.main import app
 
 
 def test_chat_send_returns_503_when_plan_generation_times_out(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    monkeypatch.setenv("SESSION_SECRET", "test-secret")
     get_settings.cache_clear()
 
     import app.routes.chat as chat_route
@@ -17,7 +19,11 @@ def test_chat_send_returns_503_when_plan_generation_times_out(monkeypatch: pytes
     monkeypatch.setattr(chat_route, "generate_weekly_plan_openai_required", fake_generate_weekly_plan_openai_required)
 
     client = TestClient(app)
-    r = client.post("/chat/send", json={"user_message": "Help"})
+    r = client.post(
+        "/chat/send",
+        headers={"Authorization": f"Bearer {issue_session_token('u1')}"},
+        json={"user_message": "Help"},
+    )
     assert r.status_code == 503
 
 

@@ -21,13 +21,16 @@ def test_chat_language_request_reuses_last_selected_candidate(tmp_path, monkeypa
 
     async def fake_coach_decide(**kwargs) -> CoachDecision:
         pj = kwargs.get("plan_items_json") or ""
-        # Candidate list restricted to last-selected
+        # Candidate list includes both; last-selected is flagged and included in user_state_json.
         assert '"id": "eng-1"' in pj
-        assert '"id": "math-1"' not in pj
+        assert '"id": "math-1"' in pj
+        assert '"is_last_selected": true' in pj
+        assert '"last_selected_plan_item_id": "eng-1"' in (kwargs.get("user_state_json") or "")
         return CoachDecision(
+            reply_language="sv",
+            intent="continue",
             assistant_text="Självklart — jag kan svara på svenska.",
             selected_plan_item_id="eng-1",
-            reply_language="sv",
         )
 
     monkeypatch.setattr(chat_route, "coach_decide", fake_coach_decide)
