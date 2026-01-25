@@ -1,6 +1,9 @@
 Student message:
 {user_message}
 
+Conversation so far (most recent last, may be empty):
+{conversation_history}
+
 Plan item candidates (JSON array). Pick ONE by id:
 {plan_items_json}
 
@@ -11,5 +14,7 @@ Output JSON only:
 {
   "assistant_text": "...",
   "selected_plan_item_id": "...",
-  "mark_done_plan_item_id": null
+  "mark_done_plan_item_id": null,
+  "reply_language": "sv",
+  "evidence": null
 }

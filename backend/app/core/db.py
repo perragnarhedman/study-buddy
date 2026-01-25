@@ -42,6 +42,25 @@ def _init(conn: sqlite3.Connection) -> None:
         )
         """
     )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS chat_history (
+          user_id TEXT NOT NULL,
+          role TEXT NOT NULL,
+          text TEXT NOT NULL,
+          created_at INTEGER NOT NULL
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS user_state (
+          user_id TEXT PRIMARY KEY,
+          last_selected_plan_item_id TEXT,
+          updated_at INTEGER NOT NULL
+        )
+        """
+    )
     conn.commit()
 
 
@@ -101,5 +120,69 @@ def get_assignment_status_map(*, user_id: str) -> dict[str, str]:
         (user_id,),
     ).fetchall()
     return {str(r["source_assignment_id"]): str(r["status"]) for r in rows}
+
+
+def append_chat_history(*, user_id: str, role: str, text: str, created_at: int) -> None:
+    conn = get_conn()
+    with conn:
+        conn.execute(
+            "INSERT INTO chat_history (user_id, role, text, created_at) VALUES (?, ?, ?, ?)",
+            (user_id, role, text, created_at),
+        )
+        # Keep last 20 rows per user (simple pruning).
+        conn.execute(
+            """
+            DELETE FROM chat_history
+            WHERE rowid IN (
+              SELECT rowid FROM chat_history
+              WHERE user_id=?
+              ORDER BY created_at DESC
+              LIMIT -1 OFFSET 20
+            )
+            """,
+            (user_id,),
+        )
+
+
+def get_chat_history(*, user_id: str, limit: int = 10) -> list[dict]:
+    conn = get_conn()
+    rows = conn.execute(
+        """
+        SELECT role, text, created_at
+        FROM chat_history
+        WHERE user_id=?
+        ORDER BY created_at ASC
+        LIMIT ?
+        """,
+        (user_id, int(limit)),
+    ).fetchall()
+    return [{"role": str(r["role"]), "text": str(r["text"]), "created_at": int(r["created_at"])} for r in rows]
+
+
+def set_last_selected_plan_item_id(*, user_id: str, plan_item_id: str, updated_at: int) -> None:
+    conn = get_conn()
+    with conn:
+        conn.execute(
+            """
+            INSERT INTO user_state (user_id, last_selected_plan_item_id, updated_at)
+            VALUES (?, ?, ?)
+            ON CONFLICT(user_id) DO UPDATE SET
+              last_selected_plan_item_id=excluded.last_selected_plan_item_id,
+              updated_at=excluded.updated_at
+            """,
+            (user_id, plan_item_id, updated_at),
+        )
+
+
+def get_last_selected_plan_item_id(*, user_id: str) -> Optional[str]:
+    conn = get_conn()
+    row = conn.execute(
+        "SELECT last_selected_plan_item_id FROM user_state WHERE user_id=?",
+        (user_id,),
+    ).fetchone()
+    if not row:
+        return None
+    v = row["last_selected_plan_item_id"]
+    return str(v) if isinstance(v, str) and v else None
 
 

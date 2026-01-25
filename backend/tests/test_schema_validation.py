@@ -50,6 +50,7 @@ def test_chat_send_returns_best_next_action_and_mentions_it(monkeypatch: pytest.
         return CoachDecision(
             assistant_text="OK — let’s do English next.",
             selected_plan_item_id="p1",
+            reply_language="en",
         )
 
     monkeypatch.setattr(chat_route, "coach_decide", fake_coach_decide)
@@ -90,6 +91,7 @@ def test_chat_send_respects_user_preference_for_subject(monkeypatch: pytest.Monk
         return CoachDecision(
             assistant_text="Sure — let’s do English today.",
             selected_plan_item_id="e1",
+            reply_language="en",
         )
 
     monkeypatch.setattr(chat_route, "coach_decide", fake_coach_decide)

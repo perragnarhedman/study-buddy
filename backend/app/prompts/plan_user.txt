@@ -1,0 +1,6 @@
+week_start:
+{week_start}
+
+Assignments JSON:
+{assignments_json}
+

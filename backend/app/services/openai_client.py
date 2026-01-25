@@ -37,27 +37,16 @@ async def plan_week(assignments_json: str, week_start: str) -> str:
     if not settings.openai_api_key:
         raise RuntimeError("OPENAI_API_KEY missing")
 
-    # Planning prompt: must return a WeeklyPlan JSON object.
-    prompt = (
-        "You are a study planner. Output ONLY valid JSON for WeeklyPlan with fields:\n"
-        '{ "weekStart": "YYYY-MM-DD", "items": [ { "id": "string", "title": "string", '
-        '"dueDate": "ISO8601 or null", "estimatedMinutes": 10-20, "status": "todo|doing|done", '
-        '"sourceAssignmentId": "string or null" } ] }\n'
-        "Rules:\n"
-        "- max 15 items\n"
-        "- each estimatedMinutes between 10 and 20 inclusive\n"
-        "- status must be \"todo\" for all items\n"
-        "- ALWAYS set sourceAssignmentId to a valid assignment id from the input\n"
-        "- id format must be \"<sourceAssignmentId>-<n>\" starting at 1 (example: \"123-1\")\n"
-        f"weekStart must be {week_start}.\n"
-        "Selection rubric:\n"
-        "- prioritize due soon first, then smaller starters\n"
-        "- use assignment description (including any Attachments block) to break work into meaningful chunks\n"
-        "- if description includes page ranges (e.g. pages 34-64), start with an early subrange (e.g. pages 34-42)\n"
-        "- titles must be concrete and actionable; include what to do next (pages, questions, section name, open/read/write)\n"
-        "Assignments JSON:\n"
-        f"{assignments_json}\n"
+    system_prompt = load_text("plan_system.txt")
+    user_prompt_template = load_text("plan_user.txt")
+    user_prompt = render_template(
+        user_prompt_template,
+        {
+            "week_start": week_start,
+            "assignments_json": assignments_json,
+        },
     )
+    prompt = f"{system_prompt}\n\n{user_prompt}\n"
 
     headers = {"Authorization": f"Bearer {settings.openai_api_key}"}
     payload = {"model": settings.openai_model, "input": prompt}
@@ -84,6 +73,7 @@ async def coach_decide(
     user_message: str,
     plan_items_json: str,
     assignment_instructions: str,
+    conversation_history: str = "",
 ) -> CoachDecision:
     settings = get_settings()
     if not settings.openai_api_key:
@@ -97,6 +87,7 @@ async def coach_decide(
             "user_message": user_message,
             "plan_items_json": plan_items_json,
             "assignment_instructions": assignment_instructions,
+            "conversation_history": conversation_history,
         },
     )
     prompt = f"{system_prompt}\n\n{user_prompt}\n"
