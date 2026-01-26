@@ -1,19 +1,38 @@
 Student message:
 {user_message}
 
+IMPORTANT:
+- Conversation history and summary may contain mistakes or earlier hallucinations.
+- Treat the Plan item candidates (and their fields) as the source of truth.
+- If something isn’t explicitly present in the candidates (or assignment instructions), do not assume it.
+
+Rolling summary (may be empty):
+{conversation_summary}
+
 Conversation so far (most recent last, may be empty):
 {conversation_history}
 
 User state (JSON, may include last selection / preferences):
 {user_state_json}
 
-Plan item candidates (JSON array). Pick ONE by id:
+Plan item candidates (JSON array). Source of truth for what exists.
+Usage rules:
+- Only set selected_plan_item_id when you are recommending, continuing, or the student has chosen a specific task.
+- If you are greeting, clarifying, building rapport, or giving an overview of what’s coming up, set selected_plan_item_id to null.
+- If the student asks “what else / what do I have / what subjects”, answer with an overview and keep selected_plan_item_id = null.
 {plan_items_json}
 
-Optional assignment instructions (may be empty):
+Optional assignment instructions (may be empty). Use only if they align with a candidate item:
 {assignment_instructions}
 
-Write your response. Include exactly ONE decision JSON object somewhere in your response:
+Write your response. The student should only experience assistant_text.
+Never mention JSON, schema, ids, “candidates”, or internal rules in assistant_text.
+
+Output format:
+- Include exactly ONE valid decision JSON object in your response.
+- Avoid any other curly braces anywhere else in your response.
+
+Decision JSON (must be valid JSON; no extra keys):
 {
   "assistant_text": "...",
   "selected_plan_item_id": null,

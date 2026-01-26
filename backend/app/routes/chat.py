@@ -24,7 +24,7 @@ from app.core.db import (
     set_last_selected_plan_item_id,
     upsert_user_state,
 )
-from app.services.openai_client import build_coach_prompt, coach_decide
+from app.services.openai_client import build_coach_prompt, coach_decide, coach_decide_with_raw
 from app.services.assignment_source import select_assignments
 from app.services.debug_export import export_chat_trace
 
@@ -144,11 +144,12 @@ async def chat_send(
         )
 
     assignment_instructions = ""
-    conversation_history = ""
-    hist = get_chat_history(user_id=user_id, limit=20)
-    # simple text format the model can follow
+    # Keep only the last 5 turns (≈10 messages) to reduce prompt size + reduce
+    # amplification of any earlier mistakes in history.
+    hist = get_chat_history(user_id=user_id, limit=10)
     conversation_history = "\n".join([f"{h['role']}: {h['text']}" for h in hist])
     user_state_obj = get_user_state(user_id=user_id)
+    conversation_summary = str(user_state_obj.get("conversation_summary") or "")
     user_state_json = json.dumps(user_state_obj, ensure_ascii=False)
 
     async def _call_coach(extra_note: str = ""):
@@ -160,6 +161,7 @@ async def chat_send(
             plan_items_json=json.dumps(candidates, ensure_ascii=False),
             assignment_instructions=assignment_instructions,
             conversation_history=conversation_history,
+            conversation_summary=conversation_summary,
             user_state_json=user_state_json,
         )
         attempts.append(
@@ -169,11 +171,29 @@ async def chat_send(
                 "prompt": prompt,
             }
         )
+        # Only capture raw model output when debug export is enabled. This keeps
+        # the default path compatible with tests that monkeypatch coach_decide.
+        from app.core.config import get_settings
+
+        settings = get_settings()
+        if settings.debug_export_enabled:
+            decision, raw = await coach_decide_with_raw(
+                user_message=msg,
+                plan_items_json=json.dumps(candidates, ensure_ascii=False),
+                assignment_instructions=assignment_instructions,
+                conversation_history=conversation_history,
+                conversation_summary=conversation_summary,
+                user_state_json=user_state_json,
+            )
+            attempts[-1]["raw_model_output"] = raw
+            return decision
+
         return await coach_decide(
             user_message=msg,
             plan_items_json=json.dumps(candidates, ensure_ascii=False),
             assignment_instructions=assignment_instructions,
             conversation_history=conversation_history,
+            conversation_summary=conversation_summary,
             user_state_json=user_state_json,
         )
 

@@ -20,14 +20,17 @@ def test_debug_export_writes_trace_file(tmp_path: Path, monkeypatch: pytest.Monk
 
     import app.routes.chat as chat_route
 
-    async def fake_coach_decide(**kwargs) -> CoachDecision:
-        return CoachDecision(
-            assistant_text="Hej!",
-            reply_language="sv",
-            selected_plan_item_id="p1",
+    async def fake_coach_decide_with_raw(**kwargs) -> tuple[CoachDecision, str]:
+        return (
+            CoachDecision(
+                assistant_text="Hej!",
+                reply_language="sv",
+                selected_plan_item_id="p1",
+            ),
+            "RAW MODEL OUTPUT",
         )
 
-    monkeypatch.setattr(chat_route, "coach_decide", fake_coach_decide)
+    monkeypatch.setattr(chat_route, "coach_decide_with_raw", fake_coach_decide_with_raw)
 
     token = issue_session_token("u1")
     client = TestClient(app)
@@ -66,5 +69,6 @@ def test_debug_export_writes_trace_file(tmp_path: Path, monkeypatch: pytest.Monk
     assert obj["payload"]["user_message"] == "Hej"
     assert "attempts" in obj["payload"]
     assert obj["payload"]["attempts"][0]["prompt"]
+    assert obj["payload"]["attempts"][0]["raw_model_output"] == "RAW MODEL OUTPUT"
 
 

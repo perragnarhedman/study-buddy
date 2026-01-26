@@ -76,6 +76,29 @@ async def coach_decide(
     conversation_history: str = "",
     user_state_json: str = "",
 ) -> CoachDecision:
+    decision, _raw = await coach_decide_with_raw(
+        user_message=user_message,
+        plan_items_json=plan_items_json,
+        assignment_instructions=assignment_instructions,
+        conversation_history=conversation_history,
+        user_state_json=user_state_json,
+    )
+    return decision
+
+
+async def coach_decide_with_raw(
+    *,
+    user_message: str,
+    plan_items_json: str,
+    assignment_instructions: str,
+    conversation_history: str = "",
+    conversation_summary: str = "",
+    user_state_json: str = "",
+) -> tuple[CoachDecision, str]:
+    """
+    Like coach_decide(), but also returns the raw model output text.
+    Useful for debug exports / tracing.
+    """
     settings = get_settings()
     if not settings.openai_api_key:
         raise RuntimeError("OPENAI_API_KEY missing")
@@ -89,6 +112,7 @@ async def coach_decide(
             "plan_items_json": plan_items_json,
             "assignment_instructions": assignment_instructions,
             "conversation_history": conversation_history,
+            "conversation_summary": conversation_summary,
             "user_state_json": user_state_json,
         },
     )
@@ -113,7 +137,7 @@ async def coach_decide(
 
     raw = "\n".join(texts).strip()
     obj = _parse_json_object_relaxed(raw)
-    return CoachDecision.model_validate(obj)
+    return CoachDecision.model_validate(obj), raw
 
 
 def build_coach_prompt(
@@ -122,6 +146,7 @@ def build_coach_prompt(
     plan_items_json: str,
     assignment_instructions: str,
     conversation_history: str = "",
+    conversation_summary: str = "",
     user_state_json: str = "",
 ) -> str:
     system_prompt = load_text("coach_system.txt")
@@ -133,6 +158,7 @@ def build_coach_prompt(
             "plan_items_json": plan_items_json,
             "assignment_instructions": assignment_instructions,
             "conversation_history": conversation_history,
+            "conversation_summary": conversation_summary,
             "user_state_json": user_state_json,
         },
     )

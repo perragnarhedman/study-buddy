@@ -59,6 +59,7 @@ def test_prompts_can_format_without_missing_keys() -> None:
             "plan_items_json": "[]",
             "assignment_instructions": "",
             "conversation_history": "",
+            "conversation_summary": "",
             "user_state_json": "{}",
         },
     )
