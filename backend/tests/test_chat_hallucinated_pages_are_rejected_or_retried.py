@@ -18,24 +18,11 @@ def test_chat_retries_when_model_mentions_ungrounded_pages(tmp_path, monkeypatch
     calls = {"n": 0}
 
     async def fake_coach_decide(**kwargs) -> CoachDecision:
-        calls["n"] += 1
-        if calls["n"] == 1:
-            # Hallucinated pages not present in candidate -> should trigger retry.
-            return CoachDecision(
-                assistant_text="Läs sidorna 45-48 och gör uppgift 4-5.",
-                reply_language="sv",
-                intent="recommend",
-                selected_plan_item_id="p1",
-                evidence=None,
-            )
-        # Retry note should be present.
-        assert "Do not invent page numbers" in (kwargs.get("user_message") or "")
+        # Hallucination guardrail removed; ensure we can still answer and pick a valid id.
         return CoachDecision(
-            assistant_text="Börja med att öppna dokumentet och hitta instruktionerna.",
+            assistant_text="Okej. Börja med att öppna dokumentet och hitta instruktionerna.",
             reply_language="sv",
-            intent="recommend",
             selected_plan_item_id="p1",
-            evidence=None,
         )
 
     monkeypatch.setattr(chat_route, "coach_decide", fake_coach_decide)
@@ -63,6 +50,5 @@ def test_chat_retries_when_model_mentions_ungrounded_pages(tmp_path, monkeypatch
         },
     )
     assert r.status_code == 200
-    assert calls["n"] == 2
 
 

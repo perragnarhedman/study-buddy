@@ -28,7 +28,6 @@ def test_chat_language_request_reuses_last_selected_candidate(tmp_path, monkeypa
         assert '"last_selected_plan_item_id": "eng-1"' in (kwargs.get("user_state_json") or "")
         return CoachDecision(
             reply_language="sv",
-            intent="continue",
             assistant_text="Självklart — jag kan svara på svenska.",
             selected_plan_item_id="eng-1",
         )

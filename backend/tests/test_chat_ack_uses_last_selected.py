@@ -28,7 +28,6 @@ def test_chat_ack_restricts_candidates_to_last_selected(tmp_path, monkeypatch: p
         assert '"last_selected_plan_item_id": "a2-1"' in (kwargs.get("user_state_json") or "")
         return CoachDecision(
             reply_language="sv",
-            intent="continue",
             assistant_text="Okej — vi fortsätter med matte.",
             selected_plan_item_id="a2-1",
         )

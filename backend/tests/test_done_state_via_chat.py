@@ -79,7 +79,6 @@ def test_chat_can_mark_done_and_plan_reflects_it(tmp_path, monkeypatch: pytest.M
         return CoachDecision(
             assistant_text="Got it — marked that as done. Next, try the first 3 math problems.",
             reply_language="en",
-            intent="mark_done",
             selected_plan_item_id="a2-1",
             mark_done_plan_item_id="a1-1",
         )

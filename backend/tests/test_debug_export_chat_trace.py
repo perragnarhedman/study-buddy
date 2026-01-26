@@ -24,10 +24,7 @@ def test_debug_export_writes_trace_file(tmp_path: Path, monkeypatch: pytest.Monk
         return CoachDecision(
             assistant_text="Hej!",
             reply_language="sv",
-            intent="recommend",
             selected_plan_item_id="p1",
-            evidence=None,
-            clarifying_question=None,
         )
 
     monkeypatch.setattr(chat_route, "coach_decide", fake_coach_decide)

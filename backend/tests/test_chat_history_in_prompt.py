@@ -26,7 +26,6 @@ def test_chat_includes_recent_history_in_prompt(tmp_path, monkeypatch: pytest.Mo
         assert "assistant: Hej! Vad vill du jobba med?" in hist
         return CoachDecision(
             reply_language="sv",
-            intent="continue",
             assistant_text="Bra, vi fortsätter.",
             selected_plan_item_id="p1",
         )

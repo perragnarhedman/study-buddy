@@ -13,13 +13,10 @@ Plan item candidates (JSON array). Pick ONE by id:
 Optional assignment instructions (may be empty):
 {assignment_instructions}
 
-Output JSON only:
+Write your response. Include exactly ONE decision JSON object somewhere in your response:
 {
   "assistant_text": "...",
-  "reply_language": "sv",
-  "intent": "recommend",
-  "selected_plan_item_id": null,
+  "selected_plan_item_id": "...",
   "mark_done_plan_item_id": null,
-  "evidence": null,
-  "clarifying_question": null
+  "reply_language": "sv"
 }

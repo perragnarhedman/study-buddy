@@ -70,7 +70,7 @@ def test_prompts_can_format_without_missing_keys() -> None:
     assert "Help me" in user
     assert "{plan_items_json}" not in user
     assert "{assignment_instructions}" not in user
-    assert "Return ONLY valid JSON" in system
+    assert "Decision JSON schema" in system
     assert "{week_start}" not in plan_user
     assert "{assignments_json}" not in plan_user
 

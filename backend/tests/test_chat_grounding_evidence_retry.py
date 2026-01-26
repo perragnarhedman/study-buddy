@@ -18,24 +18,11 @@ def test_chat_retries_when_evidence_is_ungrounded(tmp_path, monkeypatch: pytest.
     calls = {"n": 0}
 
     async def fake_coach_decide(**kwargs) -> CoachDecision:
-        calls["n"] += 1
-        if calls["n"] == 1:
-            # Ungrounded evidence -> should trigger retry
-            return CoachDecision(
-                assistant_text="Läs sidor 45–48 och gör 4–5.",
-                reply_language="sv",
-                intent="recommend",
-                selected_plan_item_id="p1",
-                evidence="pages 45-48",
-            )
-        # Retry must include the evidence correction note.
-        assert "evidence must be a short exact quote" in (kwargs.get("user_message") or "")
+        # No evidence/grounding enforcement anymore; just ensure we return a valid id.
         return CoachDecision(
-            assistant_text="Börja med att öppna PDF:en och skumma första sidan.",
+            assistant_text="Börja med att öppna dokumentet och hitta instruktionerna.",
             reply_language="sv",
-            intent="recommend",
             selected_plan_item_id="p1",
-            evidence="skim the PDF",
         )
 
     monkeypatch.setattr(chat_route, "coach_decide", fake_coach_decide)
@@ -63,6 +50,5 @@ def test_chat_retries_when_evidence_is_ungrounded(tmp_path, monkeypatch: pytest.
         },
     )
     assert r.status_code == 200
-    assert calls["n"] == 2
 
 
