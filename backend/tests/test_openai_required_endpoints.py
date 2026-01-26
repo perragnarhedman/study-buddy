@@ -24,7 +24,10 @@ def test_chat_send_returns_503_when_openai_missing() -> None:
     r = client.post(
         "/chat/send",
         headers={"Authorization": f"Bearer {issue_session_token('u1')}"},
-        json={"user_message": "Hi"},
+        json={
+            "user_message": "Hi",
+            "current_plan": {"weekStart": "2026-01-13", "items": []},
+        },
     )
     assert r.status_code == 503
 

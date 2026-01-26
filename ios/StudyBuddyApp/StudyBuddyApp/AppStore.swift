@@ -128,6 +128,11 @@ final class AppStore: ObservableObject {
             return
         }
 
+        // Ensure we have a current plan to send (backend requires current_plan).
+        if weeklyPlan == nil {
+            await loadWeeklyPlan(preserveChatAction: true)
+        }
+
         do {
             let resp = try await api.sendChat(userMessage: trimmed, currentPlan: weeklyPlan, sessionToken: sessionToken)
             updateMessageText(id: assistantId, newText: resp.assistantMessage.text)

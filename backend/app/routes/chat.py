@@ -25,11 +25,19 @@ from app.core.db import (
     upsert_user_state,
 )
 from app.services.openai_client import build_coach_prompt, coach_decide
-from app.services.planning import generate_weekly_plan_openai_required
 from app.services.assignment_source import select_assignments
 from app.services.debug_export import export_chat_trace
 
 router = APIRouter()
+
+def _update_rolling_summary(prev: str, user_text: str, assistant_text: str, *, max_chars: int = 1200) -> str:
+    # Simple rolling summary: append the latest turn and keep the last max_chars characters.
+    line = f"U: {user_text.strip()}\nA: {assistant_text.strip()}\n"
+    combined = (prev or "").strip()
+    combined = (combined + ("\n" if combined else "") + line).strip()
+    if len(combined) <= max_chars:
+        return combined
+    return combined[-max_chars:]
 
 def _require_openai() -> None:
     from app.core.config import get_settings
@@ -50,16 +58,10 @@ async def chat_send(
     if not user_text:
         raise HTTPException(status_code=400, detail="user_message required")
 
-    # Candidates come from current_plan if provided; otherwise generate via OpenAI-required planner.
-    if payload.current_plan and payload.current_plan.items:
-        plan_items = payload.current_plan.items
-    else:
-        try:
-            plan, _meta = await generate_weekly_plan_openai_required(user_id=user_id)
-            plan_items = plan.items
-        except Exception as e:
-            print(f"chat_send openai_plan_error={type(e).__name__}")
-            raise HTTPException(status_code=503, detail="OpenAI unavailable")
+    # Single source of truth: the client must provide current_plan.
+    if not payload.current_plan or not payload.current_plan.items:
+        raise HTTPException(status_code=400, detail="current_plan is required")
+    plan_items = payload.current_plan.items
 
     # Detect a lightweight user language hint (sv/en) for validation.
     def _detect_lang_hint(s: str) -> str:
@@ -92,7 +94,16 @@ async def chat_send(
     # We keep it bounded for prompt size and filter done items.
     last_selected = get_last_selected_plan_item_id(user_id=user_id)
     base_items = [it for it in plan_items if it.status != "done"]
-    candidate_items = base_items[:12]
+
+    # Follow-up handling: if the student just acknowledges (e.g. "Ja.", "Ok"), continue the last selected item.
+    ut = user_text.strip().lower().strip(".!?")
+    ack = ut in {"ja", "japp", "ok", "okej", "yes", "yep", "sure", "kör", "bra"}
+    if ack and last_selected:
+        candidate_items = [it for it in base_items if it.id == last_selected][:1]
+        if not candidate_items:
+            candidate_items = base_items[:12]
+    else:
+        candidate_items = base_items[:12]
 
     candidates = []
     for it in candidate_items:
@@ -114,7 +125,7 @@ async def chat_send(
             assignment_url = a.url or ""
             d = a.description
             if isinstance(d, str):
-                desc = d[:400]
+                desc = d[:1000]
         candidates.append(
             {
                 "id": it.id,
@@ -134,13 +145,16 @@ async def chat_send(
 
     assignment_instructions = ""
     conversation_history = ""
-    hist = get_chat_history(user_id=user_id, limit=10)
+    hist = get_chat_history(user_id=user_id, limit=20)
     # simple text format the model can follow
     conversation_history = "\n".join([f"{h['role']}: {h['text']}" for h in hist])
-    user_state_json = json.dumps(get_user_state(user_id=user_id), ensure_ascii=False)
+    user_state_obj = get_user_state(user_id=user_id)
+    user_state_json = json.dumps(user_state_obj, ensure_ascii=False)
 
     async def _call_coach(extra_note: str = ""):
         msg = user_text if not extra_note else f"{user_text}\n\nNOTE: {extra_note}"
+        if ack and last_selected:
+            msg = f"{msg}\n\nNOTE: The student is acknowledging your previous suggestion. Continue the same task/thread; do not switch subjects."
         prompt = build_coach_prompt(
             user_message=msg,
             plan_items_json=json.dumps(candidates, ensure_ascii=False),
@@ -219,6 +233,11 @@ async def chat_send(
         user_id=user_id,
         language_preference=decision.reply_language,
         last_intent=None,
+        conversation_summary=_update_rolling_summary(
+            str(user_state_obj.get("conversation_summary") or ""),
+            user_text,
+            text,
+        ),
         updated_at=now_ts,
     )
     if best_next_action is not None:

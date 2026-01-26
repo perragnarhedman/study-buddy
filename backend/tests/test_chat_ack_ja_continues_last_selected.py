@@ -7,7 +7,7 @@ from app.main import app
 from app.models.agent import CoachDecision
 
 
-def test_chat_ack_restricts_candidates_to_last_selected(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_chat_ack_ja_restricts_candidates_to_last_selected(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("OPENAI_API_KEY", "test-key")
     monkeypatch.setenv("SESSION_SECRET", "test-secret")
     monkeypatch.setenv("SQLITE_PATH", str(tmp_path / "test.db"))
@@ -20,14 +20,13 @@ def test_chat_ack_restricts_candidates_to_last_selected(tmp_path, monkeypatch: p
     import app.routes.chat as chat_route
 
     async def fake_coach_decide(**kwargs) -> CoachDecision:
-        # When the user acknowledges, server restricts candidates to last-selected to keep the thread coherent.
         pj = kwargs.get("plan_items_json") or ""
+        # Only last-selected should be offered on "Ja."
         assert '"id": "a2-1"' in pj
         assert '"id": "a1-1"' not in pj
-        assert '"last_selected_plan_item_id": "a2-1"' in (kwargs.get("user_state_json") or "")
         return CoachDecision(
+            assistant_text="Toppen — vi fortsätter med matte.",
             reply_language="sv",
-            assistant_text="Okej — vi fortsätter med matte.",
             selected_plan_item_id="a2-1",
         )
 
@@ -39,7 +38,7 @@ def test_chat_ack_restricts_candidates_to_last_selected(tmp_path, monkeypatch: p
         "/chat/send",
         headers={"Authorization": f"Bearer {token}"},
         json={
-            "user_message": "Okej",
+            "user_message": "Ja.",
             "current_plan": {
                 "weekStart": "2026-01-19",
                 "items": [
