@@ -175,23 +175,26 @@ async def chat_send(
         raise HTTPException(status_code=503, detail="OpenAI unavailable")
 
     candidate_ids = {it.id for it in candidate_items}
-    if decision.selected_plan_item_id not in candidate_ids:
-        try:
-            decision = await _call_coach(
-                "You MUST pick selected_plan_item_id from the candidate ids. Do not invent ids."
-            )
-        except (ValueError, ValidationError) as e:
-            print(f"chat_send openai_error={type(e).__name__}")
-            raise HTTPException(status_code=502, detail="OpenAI returned invalid JSON")
-        except Exception as e:
-            print(f"chat_send openai_error={type(e).__name__}")
-            raise HTTPException(status_code=503, detail="OpenAI unavailable")
+    best_next_action = None
+    if decision.selected_plan_item_id:
         if decision.selected_plan_item_id not in candidate_ids:
-            raise HTTPException(status_code=502, detail="OpenAI returned invalid selection")
+            try:
+                decision = await _call_coach(
+                    "If you set selected_plan_item_id, it MUST be one of the candidate ids (or null). Do not invent ids."
+                )
+            except (ValueError, ValidationError) as e:
+                print(f"chat_send openai_error={type(e).__name__}")
+                raise HTTPException(status_code=502, detail="OpenAI returned invalid JSON")
+            except Exception as e:
+                print(f"chat_send openai_error={type(e).__name__}")
+                raise HTTPException(status_code=503, detail="OpenAI unavailable")
+            if decision.selected_plan_item_id and decision.selected_plan_item_id not in candidate_ids:
+                raise HTTPException(status_code=502, detail="OpenAI returned invalid selection")
 
-    best_next_action = next((it for it in plan_items if it.id == decision.selected_plan_item_id), None)
-    if best_next_action is None:
-        raise HTTPException(status_code=502, detail="OpenAI returned invalid selection")
+        if decision.selected_plan_item_id:
+            best_next_action = next((it for it in plan_items if it.id == decision.selected_plan_item_id), None)
+            if best_next_action is None:
+                raise HTTPException(status_code=502, detail="OpenAI returned invalid selection")
 
     # Optional: persist done status.
     if decision.mark_done_plan_item_id:
@@ -218,7 +221,8 @@ async def chat_send(
         last_intent=None,
         updated_at=now_ts,
     )
-    set_last_selected_plan_item_id(user_id=user_id, plan_item_id=best_next_action.id, updated_at=now_ts)
+    if best_next_action is not None:
+        set_last_selected_plan_item_id(user_id=user_id, plan_item_id=best_next_action.id, updated_at=now_ts)
 
     assistant_message = ChatMessage(id=new_id(), role="assistant", text=text, timestamp=iso_now())
 

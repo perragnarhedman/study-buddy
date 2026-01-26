@@ -16,7 +16,7 @@ Optional assignment instructions (may be empty):
 Write your response. Include exactly ONE decision JSON object somewhere in your response:
 {
   "assistant_text": "...",
-  "selected_plan_item_id": "...",
+  "selected_plan_item_id": null,
   "mark_done_plan_item_id": null,
   "reply_language": "sv"
 }
