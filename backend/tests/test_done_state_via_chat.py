@@ -75,6 +75,33 @@ def test_chat_can_mark_done_and_plan_reflects_it(tmp_path, monkeypatch: pytest.M
     # Patch coach decision: mark a1 as done, recommend a2 next.
     import app.routes.chat as chat_route
 
+    async def fake_select_assignments(user_id):
+        return (
+            [
+                Assignment(
+                    id="a1",
+                    title="English reading",
+                    dueDate=None,
+                    courseName="English",
+                    description="Read pages 34-64.\n\nAttachments:\n- PDF: https://drive.example/file\n",
+                    url="https://drive.example/file",
+                    estimatedMinutes=None,
+                ),
+                Assignment(
+                    id="a2",
+                    title="Math practice",
+                    dueDate=None,
+                    courseName="Math",
+                    description=None,
+                    url=None,
+                    estimatedMinutes=None,
+                ),
+            ],
+            {"used_classroom": True, "used_fixture": False},
+        )
+
+    monkeypatch.setattr(chat_route, "select_assignments", fake_select_assignments)
+
     async def fake_coach_decide(**kwargs) -> CoachDecision:
         return CoachDecision(
             assistant_text="Got it — marked that as done. Next, try the first 3 math problems.",

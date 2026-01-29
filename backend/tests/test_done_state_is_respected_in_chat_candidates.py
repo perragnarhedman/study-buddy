@@ -5,6 +5,7 @@ from app.core.auth import issue_session_token
 from app.core.config import get_settings
 from app.main import app
 from app.models.agent import CoachDecision
+from app.models.schemas import Assignment
 
 
 def test_chat_does_not_offer_done_items_as_candidates(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -20,11 +21,22 @@ def test_chat_does_not_offer_done_items_as_candidates(tmp_path, monkeypatch: pyt
 
     import app.routes.chat as chat_route
 
+    async def fake_select_assignments(_user_id):
+        return (
+            [
+                Assignment(id="a1", title="Reading", dueDate=None, courseName="English", description=None, url=None, estimatedMinutes=None),
+                Assignment(id="a2", title="Math", dueDate=None, courseName="Math", description=None, url=None, estimatedMinutes=None),
+            ],
+            {"used_classroom": False, "used_fixture": False},
+        )
+
+    monkeypatch.setattr(chat_route, "select_assignments", fake_select_assignments)
+
     async def fake_coach_decide(**kwargs) -> CoachDecision:
         # Ensure the done item isn't offered to the model.
         plan_items_json = kwargs.get("plan_items_json") or ""
-        assert '"sourceAssignmentId": "a1"' not in plan_items_json
-        return CoachDecision(assistant_text="OK", reply_language="en", intent="recommend", selected_plan_item_id="a2-1")
+        assert '"id": "a1"' not in plan_items_json
+        return CoachDecision(assistant_text="OK", reply_language="en", selected_assignment_id="a2")
 
     monkeypatch.setattr(chat_route, "coach_decide", fake_coach_decide)
 

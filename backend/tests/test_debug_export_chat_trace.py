@@ -8,6 +8,7 @@ from app.core.auth import issue_session_token
 from app.core.config import get_settings
 from app.main import app
 from app.models.agent import CoachDecision
+from app.models.schemas import Assignment
 
 
 def test_debug_export_writes_trace_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -20,12 +21,22 @@ def test_debug_export_writes_trace_file(tmp_path: Path, monkeypatch: pytest.Monk
 
     import app.routes.chat as chat_route
 
+    async def fake_select_assignments(_user_id):
+        return (
+            [
+                Assignment(id="a1", title="Start something", dueDate=None, courseName="Course", description=None, url=None, estimatedMinutes=None),
+            ],
+            {"used_classroom": False, "used_fixture": False},
+        )
+
+    monkeypatch.setattr(chat_route, "select_assignments", fake_select_assignments)
+
     async def fake_coach_decide_with_raw(**kwargs) -> tuple[CoachDecision, str]:
         return (
             CoachDecision(
                 assistant_text="Hej!",
                 reply_language="sv",
-                selected_plan_item_id="p1",
+                selected_assignment_id="a1",
             ),
             "RAW MODEL OUTPUT",
         )

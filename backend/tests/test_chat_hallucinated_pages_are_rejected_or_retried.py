@@ -5,6 +5,7 @@ from app.core.auth import issue_session_token
 from app.core.config import get_settings
 from app.main import app
 from app.models.agent import CoachDecision
+from app.models.schemas import Assignment
 
 
 def test_chat_retries_when_model_mentions_ungrounded_pages(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -14,6 +15,16 @@ def test_chat_retries_when_model_mentions_ungrounded_pages(tmp_path, monkeypatch
     get_settings.cache_clear()
 
     import app.routes.chat as chat_route
+
+    async def fake_select_assignments(_user_id):
+        return (
+            [
+                Assignment(id="a1", title="Algebra worksheet", dueDate=None, courseName="Math", description=None, url=None, estimatedMinutes=None),
+            ],
+            {"used_classroom": False, "used_fixture": False},
+        )
+
+    monkeypatch.setattr(chat_route, "select_assignments", fake_select_assignments)
 
     calls = {"n": 0}
 

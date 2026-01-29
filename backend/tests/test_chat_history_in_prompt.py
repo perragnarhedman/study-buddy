@@ -5,6 +5,7 @@ from app.core.auth import issue_session_token
 from app.core.config import get_settings
 from app.main import app
 from app.models.agent import CoachDecision
+from app.models.schemas import Assignment
 
 
 def test_chat_includes_recent_history_in_prompt(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -19,6 +20,16 @@ def test_chat_includes_recent_history_in_prompt(tmp_path, monkeypatch: pytest.Mo
     append_chat_history(user_id="u1", role="assistant", text="Hej! Vad vill du jobba med?", created_at=2)
 
     import app.routes.chat as chat_route
+
+    async def fake_select_assignments(_user_id):
+        return (
+            [
+                Assignment(id="a1", title="Start something", dueDate=None, courseName="Course", description=None, url=None, estimatedMinutes=None),
+            ],
+            {"used_classroom": False, "used_fixture": False},
+        )
+
+    monkeypatch.setattr(chat_route, "select_assignments", fake_select_assignments)
 
     async def fake_coach_decide(**kwargs) -> CoachDecision:
         hist = kwargs.get("conversation_history") or ""

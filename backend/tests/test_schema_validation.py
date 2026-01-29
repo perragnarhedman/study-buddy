@@ -50,6 +50,17 @@ def test_chat_send_returns_best_next_action_and_mentions_it(monkeypatch: pytest.
     get_settings.cache_clear()
 
     import app.routes.chat as chat_route
+    from app.models.schemas import Assignment
+
+    async def fake_select_assignments(_user_id):
+        return (
+            [
+                Assignment(id="a3", title="English essay", dueDate="2026-01-20", courseName="English", description=None, url=None, estimatedMinutes=None),
+            ],
+            {"used_classroom": False, "used_fixture": False},
+        )
+
+    monkeypatch.setattr(chat_route, "select_assignments", fake_select_assignments)
 
     async def fake_coach_decide(**kwargs) -> CoachDecision:
         return CoachDecision(
@@ -94,6 +105,18 @@ def test_chat_send_respects_user_preference_for_subject(monkeypatch: pytest.Monk
     get_settings.cache_clear()
 
     import app.routes.chat as chat_route
+    from app.models.schemas import Assignment
+
+    async def fake_select_assignments(_user_id):
+        return (
+            [
+                Assignment(id="a1", title="Math homework", dueDate="2026-01-20", courseName="Math", description=None, url=None, estimatedMinutes=None),
+                Assignment(id="a3", title="English essay", dueDate="2026-01-20", courseName="English", description=None, url=None, estimatedMinutes=None),
+            ],
+            {"used_classroom": False, "used_fixture": False},
+        )
+
+    monkeypatch.setattr(chat_route, "select_assignments", fake_select_assignments)
 
     async def fake_coach_decide(**kwargs) -> CoachDecision:
         # Model selects the English item when the user prefers it.

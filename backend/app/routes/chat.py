@@ -18,9 +18,11 @@ from app.core.db import (
     append_chat_history,
     get_assignment_status_map,
     get_chat_history,
+    get_last_selected_assignment_id,
     get_last_selected_plan_item_id,
     get_user_state,
     set_assignment_status,
+    set_last_selected_assignment_id,
     set_last_selected_plan_item_id,
     upsert_user_state,
 )
@@ -91,54 +93,60 @@ async def chat_send(
     assignments_by_id = {a.id: a for a in assignments}
 
     # Candidate list for the LLM (context packaging, not the decision).
-    # We keep it bounded for prompt size and filter done items.
-    last_selected = get_last_selected_plan_item_id(user_id=user_id)
-    base_items = [it for it in plan_items if it.status != "done"]
+    # be-crg: candidates are raw Classroom assignments (no splitting).
+    last_selected_plan_item_id = get_last_selected_plan_item_id(user_id=user_id)
+    last_selected_assignment_id = get_last_selected_assignment_id(user_id=user_id)
 
-    # Follow-up handling: if the student just acknowledges (e.g. "Ja.", "Ok"), continue the last selected item.
+    # Filter out done assignments using persisted status, when possible.
+    assignment_status_map = get_assignment_status_map(user_id=user_id)
+
+    # Prefer assignments referenced by the current plan (keeps it relevant + bounded).
+    plan_assignment_ids = {it.sourceAssignmentId for it in plan_items if it.sourceAssignmentId}
+    base_assignments = [
+        a
+        for a in assignments
+        if (not plan_assignment_ids or a.id in plan_assignment_ids)
+        and assignment_status_map.get(a.id) != "done"
+    ]
+    if not base_assignments:
+        # Fallback: still provide *some* candidates if plan ids don't align.
+        base_assignments = [a for a in assignments if assignment_status_map.get(a.id) != "done"]
+
+    # Follow-up handling: if the student just acknowledges (e.g. "Ja.", "Ok"), continue the last selected thread.
     ut = user_text.strip().lower().strip(".!?")
     ack = ut in {"ja", "japp", "ok", "okej", "yes", "yep", "sure", "kör", "bra"}
-    if ack and last_selected:
-        candidate_items = [it for it in base_items if it.id == last_selected][:1]
-        if not candidate_items:
-            candidate_items = base_items[:12]
+    if ack and last_selected_assignment_id:
+        candidate_assignments = [a for a in base_assignments if a.id == last_selected_assignment_id][:1]
+        if not candidate_assignments:
+            candidate_assignments = base_assignments[:12]
     else:
-        candidate_items = base_items[:12]
+        candidate_assignments = base_assignments[:12]
 
     candidates = []
-    for it in candidate_items:
+    for a in candidate_assignments:
         desc = ""
-        course_name = ""
-        assignment_url = ""
-        assignment_title = ""
         due_soon = False
-        if isinstance(it.dueDate, str) and it.dueDate:
+        if isinstance(a.dueDate, str) and a.dueDate:
             try:
-                dt = datetime.fromisoformat(it.dueDate.replace("Z", "+00:00"))
+                dt = datetime.fromisoformat(a.dueDate.replace("Z", "+00:00"))
                 due_soon = (dt.date() - datetime.now(timezone.utc).date()).days <= 3
             except Exception:
                 due_soon = False
-        if it.sourceAssignmentId and it.sourceAssignmentId in assignments_by_id:
-            a = assignments_by_id[it.sourceAssignmentId]
-            assignment_title = a.title or ""
-            course_name = a.courseName or ""
-            assignment_url = a.url or ""
-            d = a.description
-            if isinstance(d, str):
-                desc = d[:1000]
+        d = a.description
+        if isinstance(d, str):
+            desc = d.strip()[:1000]
         candidates.append(
             {
-                "id": it.id,
-                "title": it.title,
-                "dueDate": it.dueDate,
-                "estimatedMinutes": it.estimatedMinutes,
-                "sourceAssignmentId": it.sourceAssignmentId,
+                # Candidate id is the raw assignment id.
+                "id": a.id,
+                "title": a.title,
+                "courseName": a.courseName,
+                "dueDate": a.dueDate,
+                "estimatedMinutes": a.estimatedMinutes,
                 "description": desc,
-                "courseName": course_name,
-                "assignmentTitle": assignment_title,
-                "url": assignment_url,
-                "status": it.status,
-                "is_last_selected": bool(last_selected and it.id == last_selected),
+                "url": a.url,
+                "status": assignment_status_map.get(a.id, "todo"),
+                "is_last_selected": bool(last_selected_assignment_id and a.id == last_selected_assignment_id),
                 "is_due_soon": due_soon,
             }
         )
@@ -154,7 +162,7 @@ async def chat_send(
 
     async def _call_coach(extra_note: str = ""):
         msg = user_text if not extra_note else f"{user_text}\n\nNOTE: {extra_note}"
-        if ack and last_selected:
+        if ack and (last_selected_assignment_id or last_selected_plan_item_id):
             msg = f"{msg}\n\nNOTE: The student is acknowledging your previous suggestion. Continue the same task/thread; do not switch subjects."
         prompt = build_coach_prompt(
             user_message=msg,
@@ -208,13 +216,21 @@ async def chat_send(
         print(f"chat_send openai_error={type(e).__name__}")
         raise HTTPException(status_code=503, detail="OpenAI unavailable")
 
-    candidate_ids = {it.id for it in candidate_items}
+    candidate_ids = {a.id for a in candidate_assignments}
     best_next_action = None
-    if decision.selected_plan_item_id:
-        if decision.selected_plan_item_id not in candidate_ids:
+    selected_assignment_id = getattr(decision, "selected_assignment_id", None)
+
+    # Backward compatibility during rollout: allow selecting a plan item id and translate to assignment id.
+    if not selected_assignment_id and decision.selected_plan_item_id:
+        pi = next((it for it in plan_items if it.id == decision.selected_plan_item_id), None)
+        if pi and pi.sourceAssignmentId:
+            selected_assignment_id = pi.sourceAssignmentId
+
+    if selected_assignment_id:
+        if selected_assignment_id not in candidate_ids:
             try:
                 decision = await _call_coach(
-                    "If you set selected_plan_item_id, it MUST be one of the candidate ids (or null). Do not invent ids."
+                    "If you set selected_assignment_id, it MUST be one of the candidate ids (or null). Do not invent ids."
                 )
             except (ValueError, ValidationError) as e:
                 print(f"chat_send openai_error={type(e).__name__}")
@@ -222,16 +238,27 @@ async def chat_send(
             except Exception as e:
                 print(f"chat_send openai_error={type(e).__name__}")
                 raise HTTPException(status_code=503, detail="OpenAI unavailable")
-            if decision.selected_plan_item_id and decision.selected_plan_item_id not in candidate_ids:
+            selected_assignment_id = getattr(decision, "selected_assignment_id", None) or selected_assignment_id
+            if selected_assignment_id and selected_assignment_id not in candidate_ids:
                 raise HTTPException(status_code=502, detail="OpenAI returned invalid selection")
 
-        if decision.selected_plan_item_id:
-            best_next_action = next((it for it in plan_items if it.id == decision.selected_plan_item_id), None)
-            if best_next_action is None:
-                raise HTTPException(status_code=502, detail="OpenAI returned invalid selection")
+        # Map assignment selection to best_next_action plan item (keep response compatible with iOS).
+        best_next_action = next(
+            (it for it in plan_items if it.sourceAssignmentId == selected_assignment_id and it.status != "done"),
+            None,
+        )
 
     # Optional: persist done status.
-    if decision.mark_done_plan_item_id:
+    # Optional: persist done status.
+    mark_done_assignment_id = getattr(decision, "mark_done_assignment_id", None)
+    if mark_done_assignment_id:
+        set_assignment_status(
+            user_id=user_id,
+            source_assignment_id=mark_done_assignment_id,
+            status="done",
+            updated_at=int(time.time()),
+        )
+    elif decision.mark_done_plan_item_id:
         done_item = next((it for it in plan_items if it.id == decision.mark_done_plan_item_id), None)
         if done_item and done_item.sourceAssignmentId:
             set_assignment_status(
@@ -262,6 +289,8 @@ async def chat_send(
     )
     if best_next_action is not None:
         set_last_selected_plan_item_id(user_id=user_id, plan_item_id=best_next_action.id, updated_at=now_ts)
+    if selected_assignment_id:
+        set_last_selected_assignment_id(user_id=user_id, assignment_id=selected_assignment_id, updated_at=now_ts)
 
     assistant_message = ChatMessage(id=new_id(), role="assistant", text=text, timestamp=iso_now())
 
@@ -269,7 +298,9 @@ async def chat_send(
     try:
         for a in attempts:
             a["decision"] = {
+                "selected_assignment_id": getattr(decision, "selected_assignment_id", None),
                 "selected_plan_item_id": getattr(decision, "selected_plan_item_id", None),
+                "mark_done_assignment_id": getattr(decision, "mark_done_assignment_id", None),
                 "mark_done_plan_item_id": getattr(decision, "mark_done_plan_item_id", None),
                 "reply_language": getattr(decision, "reply_language", None),
             }

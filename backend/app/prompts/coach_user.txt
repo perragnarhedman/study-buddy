@@ -17,9 +17,9 @@ User state (JSON, may include last selection / preferences):
 
 Plan item candidates (JSON array). Source of truth for what exists.
 Usage rules:
-- Only set selected_plan_item_id when you are recommending, continuing, or the student has chosen a specific task.
-- If you are greeting, clarifying, building rapport, or giving an overview of what’s coming up, set selected_plan_item_id to null.
-- If the student asks “what else / what do I have / what subjects”, answer with an overview and keep selected_plan_item_id = null.
+- Only set selected_assignment_id when you are recommending, continuing, or the student has chosen a specific assignment.
+- If you are greeting, clarifying, building rapport, or giving an overview of what’s coming up, set selected_assignment_id to null.
+- If the student asks “what else / what do I have / what subjects”, answer with an overview and keep selected_assignment_id = null.
 {plan_items_json}
 
 Optional assignment instructions (may be empty). Use only if they align with a candidate item:
@@ -35,6 +35,8 @@ Output format:
 Decision JSON (must be valid JSON; no extra keys):
 {
   "assistant_text": "...",
+  "selected_assignment_id": null,
+  "mark_done_assignment_id": null,
   "selected_plan_item_id": null,
   "mark_done_plan_item_id": null,
   "reply_language": "sv"

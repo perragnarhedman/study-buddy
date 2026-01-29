@@ -5,6 +5,7 @@ from app.core.auth import issue_session_token
 from app.core.config import get_settings
 from app.main import app
 from app.models.agent import CoachDecision
+from app.models.schemas import Assignment
 
 
 def test_chat_retries_once_on_language_mismatch(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -14,6 +15,16 @@ def test_chat_retries_once_on_language_mismatch(tmp_path, monkeypatch: pytest.Mo
     get_settings.cache_clear()
 
     import app.routes.chat as chat_route
+
+    async def fake_select_assignments(_user_id):
+        return (
+            [
+                Assignment(id="a1", title="English essay", dueDate=None, courseName="English", description=None, url=None, estimatedMinutes=None),
+            ],
+            {"used_classroom": False, "used_fixture": False},
+        )
+
+    monkeypatch.setattr(chat_route, "select_assignments", fake_select_assignments)
 
     async def fake_coach_decide(**kwargs) -> CoachDecision:
         return CoachDecision(

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from functools import lru_cache
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -38,6 +39,10 @@ class Settings(BaseSettings):
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
+    # Tests should be deterministic and must not accidentally read developer
+    # secrets or local debug flags from `.env`.
+    if os.getenv("PYTEST_CURRENT_TEST"):
+        return Settings()
     try:
         return Settings(_env_file=".env", _env_file_encoding="utf-8")
     except OSError:

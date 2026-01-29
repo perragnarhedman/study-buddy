@@ -57,6 +57,7 @@ def _init(conn: sqlite3.Connection) -> None:
         CREATE TABLE IF NOT EXISTS user_state (
           user_id TEXT PRIMARY KEY,
           last_selected_plan_item_id TEXT,
+          last_selected_assignment_id TEXT,
           language_preference TEXT,
           last_intent TEXT,
           preferred_subject TEXT,
@@ -66,6 +67,7 @@ def _init(conn: sqlite3.Connection) -> None:
         """
     )
     # Lightweight migrations for existing DBs.
+    _ensure_column(conn, "user_state", "last_selected_assignment_id", "TEXT")
     _ensure_column(conn, "user_state", "language_preference", "TEXT")
     _ensure_column(conn, "user_state", "last_intent", "TEXT")
     _ensure_column(conn, "user_state", "preferred_subject", "TEXT")
@@ -195,6 +197,33 @@ def set_last_selected_plan_item_id(*, user_id: str, plan_item_id: str, updated_a
         )
 
 
+def set_last_selected_assignment_id(*, user_id: str, assignment_id: str, updated_at: int) -> None:
+    conn = get_conn()
+    with conn:
+        conn.execute(
+            """
+            INSERT INTO user_state (user_id, last_selected_assignment_id, updated_at)
+            VALUES (?, ?, ?)
+            ON CONFLICT(user_id) DO UPDATE SET
+              last_selected_assignment_id=excluded.last_selected_assignment_id,
+              updated_at=excluded.updated_at
+            """,
+            (user_id, assignment_id, updated_at),
+        )
+
+
+def get_last_selected_assignment_id(*, user_id: str) -> Optional[str]:
+    conn = get_conn()
+    row = conn.execute(
+        "SELECT last_selected_assignment_id FROM user_state WHERE user_id=?",
+        (user_id,),
+    ).fetchone()
+    if not row:
+        return None
+    v = row["last_selected_assignment_id"]
+    return str(v) if isinstance(v, str) and v else None
+
+
 def get_last_selected_plan_item_id(*, user_id: str) -> Optional[str]:
     conn = get_conn()
     row = conn.execute(
@@ -210,13 +239,14 @@ def get_last_selected_plan_item_id(*, user_id: str) -> Optional[str]:
 def get_user_state(*, user_id: str) -> dict:
     conn = get_conn()
     row = conn.execute(
-        "SELECT last_selected_plan_item_id, language_preference, last_intent, preferred_subject, conversation_summary FROM user_state WHERE user_id=?",
+        "SELECT last_selected_plan_item_id, last_selected_assignment_id, language_preference, last_intent, preferred_subject, conversation_summary FROM user_state WHERE user_id=?",
         (user_id,),
     ).fetchone()
     if not row:
         return {}
     out = {
         "last_selected_plan_item_id": row["last_selected_plan_item_id"],
+        "last_selected_assignment_id": row["last_selected_assignment_id"],
         "language_preference": row["language_preference"],
         "last_intent": row["last_intent"],
         "preferred_subject": row["preferred_subject"],
