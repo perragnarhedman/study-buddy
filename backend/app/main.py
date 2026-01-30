@@ -1,5 +1,6 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
+from uuid import uuid4
 
 from app.core.config import get_settings
 from app.routes.auth_google import router as auth_google_router
@@ -13,6 +14,21 @@ def create_app() -> FastAPI:
     settings = get_settings()
 
     app = FastAPI(title="Study Buddy API")
+
+    @app.middleware("http")
+    async def add_request_id(request: Request, call_next):
+        """
+        Minimal observability: attach a request id to every response and log it for errors.
+        """
+        rid = request.headers.get("X-Request-ID") or uuid4().hex[:12]
+        try:
+            response: Response = await call_next(request)
+        except Exception:
+            # High-level only; avoid logging secrets.
+            print(f"request_error request_id={rid} path={request.url.path}")
+            raise
+        response.headers["X-Request-ID"] = rid
+        return response
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origins_list(),
