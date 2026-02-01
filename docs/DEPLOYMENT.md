@@ -23,6 +23,10 @@ cd backend
 docker build -t study-buddy-backend:latest .
 ```
 
+### Render note (monorepo build context)
+If Render builds using the **repo root** as build context, set Dockerfile path to `backend/Dockerfile`.
+That Dockerfile expects repo-root context and copies `backend/requirements.txt` and `backend/app`.
+
 Run (example):
 
 ```bash

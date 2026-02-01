@@ -1,0 +1,15 @@
+.git
+.DS_Store
+
+# Python / venv
+**/__pycache__/
+**/*.pyc
+**/.pytest_cache/
+backend/.venv/
+
+# Local secrets + data
+backend/.env
+backend/backend.sqlite3
+backend/debug_exports/
+
+
