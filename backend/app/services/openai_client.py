@@ -74,6 +74,7 @@ async def coach_decide(
     plan_items_json: str,
     assignment_instructions: str,
     conversation_history: str = "",
+    conversation_summary: str = "",
     user_state_json: str = "",
 ) -> CoachDecision:
     decision, _raw = await coach_decide_with_raw(
@@ -81,6 +82,7 @@ async def coach_decide(
         plan_items_json=plan_items_json,
         assignment_instructions=assignment_instructions,
         conversation_history=conversation_history,
+        conversation_summary=conversation_summary,
         user_state_json=user_state_json,
     )
     return decision
