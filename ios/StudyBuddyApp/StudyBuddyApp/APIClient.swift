@@ -3,6 +3,7 @@ import Foundation
 enum APIError: Error {
     case invalidURL
     case badStatus(Int)
+    case badRequest(String)
     case decodingFailed
     case serviceUnavailable
     case unauthorized
@@ -60,6 +61,10 @@ final class APIClient {
 
         let (data, resp) = try await URLSession.shared.data(for: req)
         guard let http = resp as? HTTPURLResponse else { throw APIError.badStatus(-1) }
+        if http.statusCode == 400 {
+            let msg = String(data: data, encoding: .utf8) ?? ""
+            throw APIError.badRequest(msg)
+        }
         if http.statusCode == 503 { throw APIError.serviceUnavailable }
         if http.statusCode == 401 { throw APIError.unauthorized }
         guard (200..<300).contains(http.statusCode) else { throw APIError.badStatus(http.statusCode) }

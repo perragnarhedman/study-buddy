@@ -129,12 +129,19 @@ final class AppStore: ObservableObject {
         }
 
         // Ensure we have a current plan to send (backend requires current_plan).
-        if weeklyPlan == nil {
+        if weeklyPlan == nil || weeklyPlan?.items.isEmpty == true {
             await loadWeeklyPlan(preserveChatAction: true)
+        }
+        // If plan load failed, do NOT call /chat/send (backend will 400).
+        guard let currentPlan = weeklyPlan, !currentPlan.items.isEmpty else {
+            bestNextActionFromChat = nil
+            chatErrorMessage = "Plan not loaded. Open the Plan tab (or pull to refresh) and try again."
+            updateMessageText(id: assistantId, newText: "I can’t send that yet because your plan hasn’t loaded. Open the Plan tab and try again.")
+            return
         }
 
         do {
-            let resp = try await api.sendChat(userMessage: trimmed, currentPlan: weeklyPlan, sessionToken: sessionToken)
+            let resp = try await api.sendChat(userMessage: trimmed, currentPlan: currentPlan, sessionToken: sessionToken)
             updateMessageText(id: assistantId, newText: resp.assistantMessage.text)
             bestNextActionFromChat = resp.bestNextAction
             chatErrorMessage = nil
@@ -147,6 +154,11 @@ final class AppStore: ObservableObject {
             if let apiError = error as? APIError, case .serviceUnavailable = apiError {
                 chatErrorMessage = "Coach service unavailable (OpenAI)."
                 updateMessageText(id: assistantId, newText: "Coach service unavailable right now (OpenAI).")
+            } else if let apiError = error as? APIError, case .badRequest(let detail) = apiError {
+                // Usually means current_plan was missing or invalid. Treat as a plan-sync problem.
+                chatErrorMessage = "Chat request was invalid. Please open the Plan tab to refresh, then try again."
+                let short = detail.isEmpty ? "" : "\n\nDetails: \(detail)"
+                updateMessageText(id: assistantId, newText: "I couldn’t send that because your plan wasn’t included/valid. Open the Plan tab to refresh, then try again.\(short)")
             } else if let apiError = error as? APIError, case .unauthorized = apiError {
                 authErrorMessage = "Please sign in to use Study Buddy."
                 chatErrorMessage = "Please sign in (Settings → Connect Google Classroom)."
