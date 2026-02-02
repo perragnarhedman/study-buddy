@@ -32,6 +32,13 @@ struct ChatView: View {
             inputBar
         }
         .background(Color(.systemGroupedBackground))
+        // Proactively load plan so /chat/send always has current_plan available.
+        .task {
+            guard !store.useStubData else { return }
+            if store.weeklyPlan == nil || store.weeklyPlan?.items.isEmpty == true {
+                await store.loadWeeklyPlan(preserveChatAction: true)
+            }
+        }
     }
 
     private var messagesList: some View {

@@ -58,11 +58,22 @@ async def chat_send(
 
     user_text = (payload.user_message or "").strip()
     if not user_text:
+        import logging
+
+        logging.getLogger(__name__).warning("chat_send_400 user_message_required user_id=%s", user_id)
         raise HTTPException(status_code=400, detail="user_message required")
 
     # Single source of truth: the client must provide current_plan.
-    if not payload.current_plan or not payload.current_plan.items:
+    if not payload.current_plan:
+        import logging
+
+        logging.getLogger(__name__).warning("chat_send_400 current_plan_missing user_id=%s", user_id)
         raise HTTPException(status_code=400, detail="current_plan is required")
+    if not payload.current_plan.items:
+        import logging
+
+        logging.getLogger(__name__).warning("chat_send_400 current_plan_items_empty user_id=%s", user_id)
+        raise HTTPException(status_code=400, detail="current_plan.items is required")
     plan_items = payload.current_plan.items
 
     # Detect a lightweight user language hint (sv/en) for validation.

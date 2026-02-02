@@ -163,6 +163,9 @@ final class AppStore: ObservableObject {
                 authErrorMessage = "Please sign in to use Study Buddy."
                 chatErrorMessage = "Please sign in (Settings → Connect Google Classroom)."
                 updateMessageText(id: assistantId, newText: "Please sign in to continue (Settings → Connect Google Classroom).")
+            } else if let apiError = error as? APIError, case .badStatus(let code) = apiError {
+                chatErrorMessage = "Backend returned an error (\(code))."
+                updateMessageText(id: assistantId, newText: "Backend returned an error (\(code)).")
             } else {
                 chatErrorMessage = "Could not reach backend."
                 updateMessageText(id: assistantId, newText: "Could not reach backend.")
