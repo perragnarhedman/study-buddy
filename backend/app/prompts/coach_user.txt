@@ -1,4 +1,4 @@
-Student message:
+STUDENT LATEST MESSAGE (highest priority):
 {user_message}
 
 IMPORTANT:

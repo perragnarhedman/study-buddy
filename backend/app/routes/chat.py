@@ -33,10 +33,18 @@ from app.services.debug_export import export_chat_trace
 router = APIRouter()
 
 def _update_rolling_summary(prev: str, user_text: str, assistant_text: str, *, max_chars: int = 1200) -> str:
-    # Simple rolling summary: append the latest turn and keep the last max_chars characters.
-    line = f"U: {user_text.strip()}\nA: {assistant_text.strip()}\n"
-    combined = (prev or "").strip()
-    combined = (combined + ("\n" if combined else "") + line).strip()
+    """
+    Rolling summary used as *optional* context for the coach prompt.
+    Important: do NOT persist assistant text here (it may contain mistakes/hallucinations).
+
+    We store only user lines and also sanitize any legacy summaries that included "A:" lines.
+    """
+    # Keep only user lines from previous summary (migration away from legacy U/A format).
+    prev_lines = [ln.strip() for ln in (prev or "").splitlines() if ln.strip().startswith("U:")]
+    combined = "\n".join(prev_lines).strip()
+
+    new_line = f"U: {user_text.strip()}"
+    combined = (combined + ("\n" if combined else "") + new_line).strip()
     if len(combined) <= max_chars:
         return combined
     return combined[-max_chars:]

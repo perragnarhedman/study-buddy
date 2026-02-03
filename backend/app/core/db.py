@@ -184,12 +184,15 @@ def get_chat_history(*, user_id: str, limit: int = 10) -> list[dict]:
         SELECT role, text, created_at
         FROM chat_history
         WHERE user_id=?
-        ORDER BY created_at ASC
+        ORDER BY created_at DESC
         LIMIT ?
         """,
         (user_id, int(limit)),
     ).fetchall()
-    return [{"role": str(r["role"]), "text": str(r["text"]), "created_at": int(r["created_at"])} for r in rows]
+    # We fetch newest-first for correctness (LIMIT), then return oldest→newest for prompt readability.
+    out = [{"role": str(r["role"]), "text": str(r["text"]), "created_at": int(r["created_at"])} for r in rows]
+    out.reverse()
+    return out
 
 
 def set_last_selected_plan_item_id(*, user_id: str, plan_item_id: str, updated_at: int) -> None:
