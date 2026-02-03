@@ -2,7 +2,7 @@ from app.models.schemas import Assignment
 from app.services.planner import MAX_PLAN_ITEMS, generate_weekly_plan
 
 
-def test_planner_splits_chunks_10_to_20() -> None:
+def test_planner_creates_one_item_per_assignment_and_keeps_reasonable_minutes() -> None:
     a = Assignment(
         id="x",
         title="Big assignment",
@@ -13,11 +13,10 @@ def test_planner_splits_chunks_10_to_20() -> None:
     plan = generate_weekly_plan([a])
     mins = [i.estimatedMinutes for i in plan.items]
     titles = [i.title for i in plan.items]
-    assert len(mins) == 4
-    assert len(set(titles)) == 4
-    assert all("Start Big assignment" in t for t in titles)
-    assert all("(" in t and ")" in t for t in titles)
-    assert all(m is not None and 10 <= m <= 20 for m in mins)
+    assert len(mins) == 1
+    assert len(set(titles)) == 1
+    assert titles[0].startswith("Start Big assignment")
+    assert mins[0] is not None and 10 <= mins[0] <= 180
 
 
 def test_planner_caps_at_15_items() -> None:

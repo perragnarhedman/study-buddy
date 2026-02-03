@@ -67,6 +67,20 @@ struct PlanView: View {
                         .font(.subheadline)
                 }
 
+                if let attachments = action.attachments, !attachments.isEmpty {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("Attachments")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                        ForEach(attachments.prefix(5), id: \.url) { a in
+                            if let u = URL(string: a.url) {
+                                Link(a.title, destination: u)
+                                    .font(.subheadline)
+                            }
+                        }
+                    }
+                }
+
                 HStack(spacing: 10) {
                     if let mins = action.estimatedMinutes {
                         Label("\(mins) min", systemImage: "timer")
@@ -126,6 +140,17 @@ private struct PlanRow: View {
                         Text("Due \(due)")
                             .font(.caption)
                             .foregroundStyle(.secondary)
+                    }
+                }
+
+                if let attachments = item.attachments, !attachments.isEmpty {
+                    VStack(alignment: .leading, spacing: 4) {
+                        ForEach(attachments.prefix(3), id: \.url) { a in
+                            if let u = URL(string: a.url) {
+                                Link(a.title, destination: u)
+                                    .font(.caption)
+                            }
+                        }
                     }
                 }
             }

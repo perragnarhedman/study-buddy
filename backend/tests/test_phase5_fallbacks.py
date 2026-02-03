@@ -62,7 +62,7 @@ def test_llm_violates_rails_is_normalized(monkeypatch: pytest.MonkeyPatch) -> No
     plan, meta = asyncio.run(planning_module.generate_weekly_plan_openai_required(user_id=None))
     assert meta["planner"] == "llm"
     assert len(plan.items) <= 15
-    assert all(10 <= (i.estimatedMinutes or 0) <= 20 for i in plan.items)
+    assert all(10 <= (i.estimatedMinutes or 0) <= 180 for i in plan.items)
 
 
 def test_classroom_failure_uses_fixture(monkeypatch: pytest.MonkeyPatch) -> None:

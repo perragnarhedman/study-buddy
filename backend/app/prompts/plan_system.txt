@@ -10,7 +10,7 @@ Schema (WeeklyPlan):
       "id": "string",
       "title": "string",
       "dueDate": "ISO8601 string or null",
-      "estimatedMinutes": 10-20,
+      "estimatedMinutes": 10-180,
       "status": "todo",
       "sourceAssignmentId": "string"
     }
@@ -20,14 +20,14 @@ Schema (WeeklyPlan):
 Rules:
 - weekStart MUST match the provided week_start
 - max 15 items total
-- each estimatedMinutes MUST be between 10 and 20 inclusive
+- each estimatedMinutes MUST be between 10 and 180 inclusive
 - status MUST be "todo" for all items
 - sourceAssignmentId MUST be a valid assignment id from the input assignments
-- id MUST be "<sourceAssignmentId>-<n>" starting at 1 (example: "123-1")
+- Do NOT break/split a single assignment into multiple plan items
+- Create at most ONE plan item per sourceAssignmentId
+- id MUST be "<sourceAssignmentId>-1" (example: "123-1")
 
 Selection rubric:
-- prioritize due soon first, then smaller starters
-- use assignment description (including any Attachments block) to break work into meaningful chunks
-- if description includes page ranges (e.g. pages 34-64), start with an early subrange (e.g. pages 34-42)
-- titles must be concrete and actionable; include what to do next (pages, questions, section name, open/read/write)
+- prioritize due soon first
+- titles must be concrete and actionable, but should describe the overall assignment (do not invent page ranges or subranges)
 

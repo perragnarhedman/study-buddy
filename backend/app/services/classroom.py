@@ -8,7 +8,7 @@ import httpx
 
 from app.core.config import get_settings
 from app.core.db import get_tokens, upsert_tokens
-from app.models.schemas import Assignment
+from app.models.schemas import Assignment, AttachmentLink
 
 
 GOOGLE_API_BASE = "https://classroom.googleapis.com/v1"
@@ -132,6 +132,7 @@ def _normalize_coursework(coursework: list[dict], course_name: str) -> list[Assi
         desc = w.get("description")
         url = w.get("alternateLink")
         materials = _normalize_materials(w.get("materials"))
+        attachments = [AttachmentLink(title=m["title"], url=m["url"]) for m in materials if isinstance(m.get("url"), str)]
 
         # Append attachments into description (schema stays stable).
         desc_text = str(desc) if isinstance(desc, str) else None
@@ -154,6 +155,7 @@ def _normalize_coursework(coursework: list[dict], course_name: str) -> list[Assi
                 description=desc_text,
                 url=str(url) if isinstance(url, str) else None,
                 estimatedMinutes=None,
+                attachments=attachments or None,
             )
         )
     return out

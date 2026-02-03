@@ -29,6 +29,13 @@ async def generate_weekly_plan_openai_required(
         raise ValueError("normalize_failed")
     plan = rails_enforce(plan, today=today)
 
+    # Enrich plan items with attachment links from the source assignments.
+    assignments_by_id = {a.id: a for a in assignments}
+    for it in plan.items:
+        sid = it.sourceAssignmentId
+        if sid and sid in assignments_by_id:
+            it.attachments = assignments_by_id[sid].attachments  # type: ignore[attr-defined]
+
     # Apply persisted done/doing status (per sourceAssignmentId) if available.
     if user_id:
         status_map = get_assignment_status_map(user_id=user_id)
@@ -41,7 +48,7 @@ async def generate_weekly_plan_openai_required(
     return plan, {"planner": "llm", **src_meta}
 
 def _assignments_json(assignments) -> str:
-    # Keep enough context for the model to chunk work, but cap prompt size.
+    # Keep enough context for the model to plan (without splitting), but cap prompt size.
     safe = []
     for a in assignments:
         desc = a.description if isinstance(getattr(a, "description", None), str) else None

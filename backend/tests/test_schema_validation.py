@@ -15,6 +15,7 @@ def test_weekly_plan_schema(monkeypatch: pytest.MonkeyPatch) -> None:
     get_settings.cache_clear()
 
     import app.services.planning as planning_module
+    from app.models.schemas import Assignment, AttachmentLink
 
     async def fake_plan_week(*args, **kwargs) -> str:
         return """
@@ -35,12 +36,33 @@ def test_weekly_plan_schema(monkeypatch: pytest.MonkeyPatch) -> None:
 
     monkeypatch.setattr(planning_module, "plan_week", fake_plan_week)
 
+    async def fake_select_assignments(_user_id):
+        return (
+            [
+                Assignment(
+                    id="a1",
+                    title="Homework 1A",
+                    dueDate=None,
+                    courseName="Course",
+                    description="Do problems 1-10",
+                    url=None,
+                    estimatedMinutes=None,
+                    attachments=[AttachmentLink(title="Doc", url="https://example.com/doc")],
+                )
+            ],
+            {"used_classroom": False, "used_fixture": False},
+        )
+
+    monkeypatch.setattr(planning_module, "select_assignments", fake_select_assignments)
+
     client = TestClient(app)
     from app.core.auth import issue_session_token
 
     token = issue_session_token("u1")
     r = client.get("/plan/week", headers={"Authorization": f"Bearer {token}"})
     assert r.status_code == 200
+    body = r.json()
+    assert body["items"][0]["attachments"] == [{"title": "Doc", "url": "https://example.com/doc"}]
     WeeklyPlan.model_validate(r.json())
 
 

@@ -8,7 +8,7 @@ from app.models.schemas import PlanItem, WeeklyPlan, new_id, week_start_iso
 
 MAX_ITEMS = 15
 MIN_MINUTES = 10
-MAX_MINUTES = 20
+MAX_MINUTES = 180
 
 
 def enforce_week_start(plan: WeeklyPlan, *, today: Optional[date] = None) -> WeeklyPlan:
@@ -60,6 +60,19 @@ def normalize_weekly_plan(obj: Any, *, today: Optional[date] = None) -> Optional
         src = raw.get("sourceAssignmentId")
         src = src if isinstance(src, str) else None
 
+        atts_raw = raw.get("attachments")
+        attachments = None
+        if isinstance(atts_raw, list):
+            cleaned = []
+            for a in atts_raw[:10]:
+                if not isinstance(a, dict):
+                    continue
+                t = a.get("title")
+                u = a.get("url")
+                if isinstance(t, str) and isinstance(u, str) and t.strip() and u.strip():
+                    cleaned.append({"title": t.strip(), "url": u.strip()})
+            attachments = cleaned or None
+
         items.append(
             PlanItem(
                 id=pid,
@@ -68,6 +81,7 @@ def normalize_weekly_plan(obj: Any, *, today: Optional[date] = None) -> Optional
                 estimatedMinutes=mins,
                 status=status,
                 sourceAssignmentId=src,
+                attachments=attachments,
             )
         )
 
@@ -90,6 +104,18 @@ def rails_enforce(plan: WeeklyPlan, *, today: Optional[date] = None) -> WeeklyPl
         i.estimatedMinutes = max(MIN_MINUTES, min(MAX_MINUTES, mins))  # type: ignore[attr-defined]
     plan = enforce_week_start(plan, today=today)
     plan = ensure_actionable_titles(plan)
+    # Enforce "no splitting": at most one plan item per sourceAssignmentId.
+    # Keep the first occurrence and drop subsequent items.
+    seen: set[str] = set()
+    deduped: list[PlanItem] = []
+    for it in plan.items:
+        sid = it.sourceAssignmentId
+        if isinstance(sid, str) and sid:
+            if sid in seen:
+                continue
+            seen.add(sid)
+        deduped.append(it)
+    plan.items = deduped[:MAX_ITEMS]  # type: ignore[attr-defined]
     return plan
 
 

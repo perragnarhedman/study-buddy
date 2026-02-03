@@ -1,14 +1,13 @@
 from __future__ import annotations
 from datetime import date, datetime
-from math import ceil
 from typing import Iterable, Optional
 
 from app.models.schemas import Assignment, PlanItem, WeeklyPlan, new_id, week_start_iso
 
 
-DEFAULT_CHUNK_MINUTES = 15
-MIN_CHUNK_MINUTES = 10
-MAX_CHUNK_MINUTES = 20
+DEFAULT_ESTIMATE_MINUTES = 30
+MIN_MINUTES = 10
+MAX_MINUTES = 180
 MAX_PLAN_ITEMS = 15
 
 
@@ -61,27 +60,20 @@ def generate_weekly_plan(
 
     items: list[PlanItem] = []
     for a in sorted_assignments:
-        parts = _split_minutes(a.estimatedMinutes)
-        total_parts = len(parts)
-        for part_idx, mins in enumerate(parts, start=1):
-            if len(items) >= cap_items:
-                break
-
-            title = _plan_item_title(a.title, mins, part_idx=part_idx, total_parts=total_parts)
-            items.append(
-                PlanItem(
-                    id=new_id(),
-                    title=title,
-                    dueDate=a.dueDate,
-                    estimatedMinutes=mins,
-                    status="todo",
-                    sourceAssignmentId=a.id,
-                )
+        if len(items) >= cap_items:
+            break
+        mins_raw = a.estimatedMinutes if isinstance(a.estimatedMinutes, int) else DEFAULT_ESTIMATE_MINUTES
+        mins = max(MIN_MINUTES, min(MAX_MINUTES, mins_raw))
+        items.append(
+            PlanItem(
+                id=new_id(),
+                title=_plan_item_title(a.title, mins),
+                dueDate=a.dueDate,
+                estimatedMinutes=mins,
+                status="todo",
+                sourceAssignmentId=a.id,
             )
-        if len(items) >= cap_items:
-            break
-        if len(items) >= cap_items:
-            break
+        )
 
     return WeeklyPlan(weekStart=week_start.isoformat(), items=items)
 
@@ -105,42 +97,17 @@ def pick_best_next_action(plan: WeeklyPlan) -> PlanItem:
 
 
 def coach_message_for_action(action: PlanItem) -> str:
-    # Must include a 10–20 minute starter suggestion derived from best_next_action.
-    mins = action.estimatedMinutes or DEFAULT_CHUNK_MINUTES
-    mins = max(MIN_CHUNK_MINUTES, min(MAX_CHUNK_MINUTES, mins))
+    # Keep the suggested starter small even if the task estimate is large.
+    mins = action.estimatedMinutes or DEFAULT_ESTIMATE_MINUTES
+    mins = max(10, min(20, mins))
     return f"Do this now: {action.title}. Set a {mins}-minute timer and start."
-
-
-def _split_minutes(total: Optional[int]) -> list[int]:
-    if total is None:
-        return [DEFAULT_CHUNK_MINUTES]
-    if total <= MAX_CHUNK_MINUTES:
-        return [max(MIN_CHUNK_MINUTES, total)]
-
-    # Choose number of chunks ~15 min each, then distribute to keep each 10–20 min.
-    n = ceil(total / DEFAULT_CHUNK_MINUTES)
-    base = total // n
-    rem = total % n
-    chunks = [base + (1 if i < rem else 0) for i in range(n)]
-
-    # Safety clamp (should already be within 10–20 for typical inputs).
-    out: list[int] = []
-    for c in chunks:
-        out.append(max(MIN_CHUNK_MINUTES, min(MAX_CHUNK_MINUTES, c)))
-    return out
-
 
 def _plan_item_title(
     assignment_title: str,
     minutes: int,
-    *,
-    part_idx: int,
-    total_parts: int,
 ) -> str:
-    # Keep actionable and consistent: “Start <assignment>: 15 min”
-    # If split into multiple chunks, add (1/4) etc for clarity in UI.
-    suffix = f" ({part_idx}/{total_parts})" if total_parts > 1 else ""
-    return f"Start {assignment_title}{suffix}: {minutes} min"
+    # One plan item per assignment.
+    return f"Start {assignment_title}: {minutes} min"
 
 
 def _due_date_sort_key(due_iso: Optional[str]) -> tuple[int, str]:

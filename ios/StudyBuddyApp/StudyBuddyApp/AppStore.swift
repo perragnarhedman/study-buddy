@@ -205,7 +205,8 @@ final class AppStore: ObservableObject {
                     dueDate: nil,
                     estimatedMinutes: 10,
                     status: .todo,
-                    sourceAssignmentId: nil
+                    sourceAssignmentId: nil,
+                    attachments: nil
                 ),
                 PlanItem(
                     id: UUID().uuidString,
@@ -213,7 +214,8 @@ final class AppStore: ObservableObject {
                     dueDate: nil,
                     estimatedMinutes: 15,
                     status: .todo,
-                    sourceAssignmentId: nil
+                    sourceAssignmentId: nil,
+                    attachments: nil
                 )
             ]
         )

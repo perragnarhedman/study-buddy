@@ -10,6 +10,10 @@ from pydantic import BaseModel, Field
 Role = Literal["user", "assistant"]
 PlanStatus = Literal["todo", "doing", "done"]
 
+class AttachmentLink(BaseModel):
+    title: str
+    url: str
+
 
 class ChatMessage(BaseModel):
     id: str
@@ -26,6 +30,7 @@ class Assignment(BaseModel):
     description: Optional[str] = None
     url: Optional[str] = None
     estimatedMinutes: Optional[int] = None
+    attachments: Optional[List[AttachmentLink]] = None
 
 
 class PlanItem(BaseModel):
@@ -35,6 +40,7 @@ class PlanItem(BaseModel):
     estimatedMinutes: Optional[int] = None
     status: PlanStatus
     sourceAssignmentId: Optional[str] = None
+    attachments: Optional[List[AttachmentLink]] = None
 
 
 class WeeklyPlan(BaseModel):

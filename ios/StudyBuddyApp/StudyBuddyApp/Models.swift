@@ -2,6 +2,11 @@ import Foundation
 
 // Shared meaning with backend schemas (stable).
 
+struct AttachmentLink: Codable, Equatable {
+    let title: String
+    let url: String
+}
+
 struct ChatMessage: Identifiable, Codable, Equatable {
     let id: String
     let role: Role
@@ -21,6 +26,7 @@ struct PlanItem: Identifiable, Codable, Equatable {
     let estimatedMinutes: Int?
     let status: Status
     let sourceAssignmentId: String?
+    let attachments: [AttachmentLink]?
 
     enum Status: String, Codable {
         case todo
@@ -62,6 +68,7 @@ struct Assignment: Codable, Equatable {
     let description: String?
     let url: String?
     let estimatedMinutes: Int?
+    let attachments: [AttachmentLink]?
 }
 
 struct GoogleAuthStartResponse: Codable {
