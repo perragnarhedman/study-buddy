@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import sqlite3
 from pathlib import Path
 from typing import Optional
@@ -10,10 +11,19 @@ from app.core.config import get_settings
 def get_conn() -> sqlite3.Connection:
     settings = get_settings()
     path = Path(settings.sqlite_path)
+    existed_before = path.exists()
     path.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(str(path))
     conn.row_factory = sqlite3.Row
     _init(conn)
+    try:
+        # Helpful for Render persistent disk verification.
+        size = path.stat().st_size
+        logging.getLogger(__name__).info(
+            "sqlite_db path=%s existed_before=%s size_bytes=%s", str(path), existed_before, size
+        )
+    except Exception:
+        logging.getLogger(__name__).info("sqlite_db path=%s existed_before=%s", str(path), existed_before)
     return conn
 
 
