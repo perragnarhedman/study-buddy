@@ -6,4 +6,10 @@ run:
 test:
 	pytest -q
 
+sim-quick:
+	python3 -m sim_harness.cli quick --no-openai-coach
+
+sim-quick-openai:
+	python3 -m sim_harness.cli quick
+
 

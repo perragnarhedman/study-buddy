@@ -1,0 +1,15 @@
+{
+  "scenario_id": "golden-002",
+  "title": "Overview question should not select a specific assignment",
+  "language": "sv",
+  "persona": { "grade": 9, "motivation": "low", "attention": "distracted", "style": "chatty" },
+  "constraints": { "time_available_minutes": 10, "max_turns": 4 },
+  "assignments": [
+    { "id": "a-math", "title": "Matte: kapitel 5", "courseName": "Math", "dueDate": "2026-02-12", "description": "Gör uppgift 1-12.", "url": null, "estimatedMinutes": 60 },
+    { "id": "a-sci", "title": "NO: labbrapport", "courseName": "Science", "dueDate": "2026-02-15", "description": "Skriv en kort rapport.", "url": null, "estimatedMinutes": 45 }
+  ],
+  "initial_user_message": "Vad har jag kvar att göra?",
+  "expected": { "require_no_selection": true }
+}
+
+

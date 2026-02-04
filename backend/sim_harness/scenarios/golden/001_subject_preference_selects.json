@@ -1,0 +1,15 @@
+{
+  "scenario_id": "golden-001",
+  "title": "Subject preference should select matching assignment",
+  "language": "sv",
+  "persona": { "grade": 8, "motivation": "medium", "attention": "focused", "style": "short" },
+  "constraints": { "time_available_minutes": 20, "max_turns": 6 },
+  "assignments": [
+    { "id": "a-eng", "title": "Engelska: femparagrafuppsats", "courseName": "English", "dueDate": "2026-03-10", "description": "Skriv minst 400 ord.", "url": null, "estimatedMinutes": 120 },
+    { "id": "a-his", "title": "Historia: andra världskriget", "courseName": "History", "dueDate": "2026-02-26", "description": "Läsning + frågor.", "url": null, "estimatedMinutes": 90 }
+  ],
+  "initial_user_message": "Jag vill göra engelska idag.",
+  "expected": { "require_any_selection": true }
+}
+
+

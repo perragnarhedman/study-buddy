@@ -29,4 +29,8 @@ xcuserdata/
 *.sqlite3
 *.sqlite3-*
 
+## Simulation harness outputs
+backend/sim_runs/
+sim_runs/
+
 

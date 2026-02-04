@@ -1,0 +1,15 @@
+{
+  "scenario_id": "golden-003",
+  "title": "Ack should continue the current thread (not switch subject)",
+  "language": "sv",
+  "persona": { "grade": 8, "motivation": "medium", "attention": "focused", "style": "short" },
+  "constraints": { "time_available_minutes": 15, "max_turns": 6 },
+  "assignments": [
+    { "id": "a1", "title": "Engelska: skriv utkast", "courseName": "English", "dueDate": "2026-02-20", "description": "Skriv ett första utkast.", "url": null, "estimatedMinutes": 90 },
+    { "id": "a2", "title": "Matte: problemlista", "courseName": "Math", "dueDate": "2026-02-18", "description": "Uppgifter 1-10.", "url": null, "estimatedMinutes": 60 }
+  ],
+  "initial_user_message": "Hjälp mig välja vad jag ska göra nu.",
+  "expected": { "require_any_selection": true }
+}
+
+
