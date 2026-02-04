@@ -12,7 +12,8 @@
   "expected": {
     "require_any_selection": true,
     "forbidden_selected_assignment_ids": ["a-done"],
-    "expected_selected_assignment_id": "a-todo"
+    "expected_selected_assignment_id": "a-todo",
+    "expected_selected_assignment_id_turn": 0
   }
 }
 

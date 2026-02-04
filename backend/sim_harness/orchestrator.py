@@ -27,6 +27,10 @@ class RunResult:
 def _history_lines(history: List[Dict[str, str]]) -> str:
     return "\n".join([f"{h['role']}: {h['text']}" for h in history])
 
+def _is_ack(text: str) -> bool:
+    ut = (text or "").strip().lower().strip(".!?")
+    return ut in {"ja", "japp", "ok", "okej", "yes", "yep", "sure", "kör", "bra", "okay"}
+
 
 async def run_scenario(*, scenario: Scenario, config: RunConfig) -> RunResult:
     tw = TraceWriter.create(output_dir=config.output_dir)
@@ -42,11 +46,11 @@ async def run_scenario(*, scenario: Scenario, config: RunConfig) -> RunResult:
         }
     )
 
-    candidates = build_candidates(scenario.assignments)
-    candidate_ids = [str(c["id"]) for c in candidates if isinstance(c.get("id"), str)]
+    base_candidates = build_candidates(scenario.assignments)
 
     conversation_history: List[Dict[str, str]] = []
     conversation_summary = ""  # harness-level; we keep empty for now
+    user_state_obj: Dict[str, Any] = {}
     user_state_json = "{}"
 
     state = StudentState()
@@ -58,6 +62,10 @@ async def run_scenario(*, scenario: Scenario, config: RunConfig) -> RunResult:
 
     selected_any = False
     failures: List[str] = []
+    selected_by_turn: Dict[int, Optional[str]] = {}
+    mark_done_by_turn: Dict[int, Optional[str]] = {}
+    assistant_text_by_turn: Dict[int, str] = {}
+    reply_language_by_turn: Dict[int, Optional[str]] = {}
     last_selected: Optional[str] = None
     last_mark_done: Optional[str] = None
     last_reply_language: Optional[str] = None
@@ -74,6 +82,23 @@ async def run_scenario(*, scenario: Scenario, config: RunConfig) -> RunResult:
             }
         )
 
+        # Build per-turn candidates + user_state (simulate server persistence).
+        candidates: List[Dict[str, Any]] = []
+        for c in base_candidates:
+            cc = dict(c)
+            cc["is_last_selected"] = bool(last_selected and cc.get("id") == last_selected)
+            candidates.append(cc)
+        if last_selected:
+            user_state_obj["last_selected_assignment_id"] = last_selected
+        user_state_json = json.dumps(user_state_obj, ensure_ascii=False)
+
+        # If the student acknowledges, restrict to last-selected to keep the thread coherent.
+        ack = _is_ack(user_msg)
+        if ack and last_selected:
+            candidates = [c for c in candidates if c.get("id") == last_selected] or candidates
+
+        candidate_ids = [str(c["id"]) for c in candidates if isinstance(c.get("id"), str)]
+
         # Coach step with retries (be-sim.13)
         attempt = 0
         last_err: Optional[str] = None
@@ -81,8 +106,14 @@ async def run_scenario(*, scenario: Scenario, config: RunConfig) -> RunResult:
         while attempt <= config.max_retries:
             try:
                 if config.use_openai_coach:
+                    msg_for_model = user_msg
+                    if ack and last_selected:
+                        msg_for_model = (
+                            f"{msg_for_model}\n\nNOTE: The student is acknowledging your previous suggestion. "
+                            "Continue the same task/thread; do not switch subjects."
+                        )
                     out = await run_coach_openai(
-                        user_message=user_msg,
+                        user_message=msg_for_model,
                         candidates=candidates,
                         conversation_history=_history_lines(conversation_history[:-1]),
                         conversation_summary=conversation_summary,
@@ -112,10 +143,15 @@ async def run_scenario(*, scenario: Scenario, config: RunConfig) -> RunResult:
         selected = out.selected_assignment_id
         if selected:
             selected_any = True
-        last_selected = selected
+        if selected:
+            last_selected = selected
         last_mark_done = getattr(decision, "mark_done_assignment_id", None)
         last_reply_language = getattr(decision, "reply_language", None)
         last_assistant_text = getattr(decision, "assistant_text", "") or ""
+        selected_by_turn[turn_idx] = selected
+        mark_done_by_turn[turn_idx] = last_mark_done
+        assistant_text_by_turn[turn_idx] = last_assistant_text
+        reply_language_by_turn[turn_idx] = last_reply_language
 
         tw.write_event(
             {
@@ -158,10 +194,21 @@ async def run_scenario(*, scenario: Scenario, config: RunConfig) -> RunResult:
             failures.append("expected_selection_missing")
         if scenario.expected.require_no_selection and selected_any:
             failures.append("expected_no_selection_but_got_selection")
-        if scenario.expected.expected_selected_assignment_id and last_selected != scenario.expected.expected_selected_assignment_id:
-            failures.append("expected_selected_assignment_id_mismatch")
-        if scenario.expected.forbidden_selected_assignment_ids and last_selected in set(scenario.expected.forbidden_selected_assignment_ids):
-            failures.append("selected_assignment_id_forbidden")
+        if scenario.expected.expected_selected_assignment_id:
+            turn = scenario.expected.expected_selected_assignment_id_turn
+            if isinstance(turn, int):
+                got = selected_by_turn.get(turn)
+                if got != scenario.expected.expected_selected_assignment_id:
+                    failures.append("expected_selected_assignment_id_mismatch")
+            else:
+                if last_selected != scenario.expected.expected_selected_assignment_id:
+                    failures.append("expected_selected_assignment_id_mismatch")
+        if scenario.expected.forbidden_selected_assignment_ids:
+            forbidden = set(scenario.expected.forbidden_selected_assignment_ids)
+            for t, sid in selected_by_turn.items():
+                if sid and sid in forbidden:
+                    failures.append("selected_assignment_id_forbidden")
+                    break
         if scenario.expected.expected_mark_done_assignment_id and last_mark_done != scenario.expected.expected_mark_done_assignment_id:
             failures.append("expected_mark_done_assignment_id_mismatch")
         if scenario.expected.expected_reply_language and last_reply_language != scenario.expected.expected_reply_language:

@@ -32,6 +32,9 @@ class ScenarioExpected(BaseModel):
     require_no_selection: bool = False
     # If set, the final coach turn must select this assignment id.
     expected_selected_assignment_id: Optional[str] = None
+    # If set, validate expected_selected_assignment_id on this specific coach turn index (0-based).
+    # If omitted, we validate on the final coach turn for backward compatibility.
+    expected_selected_assignment_id_turn: Optional[int] = None
     # Coach must not select any of these assignment ids on the final coach turn.
     forbidden_selected_assignment_ids: List[str] = Field(default_factory=list)
     # If set, the final coach turn must mark this assignment as done.

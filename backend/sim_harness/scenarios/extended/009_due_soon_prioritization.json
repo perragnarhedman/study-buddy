@@ -9,7 +9,7 @@
     { "id": "a-later", "title": "History reading", "courseName": "History", "dueDate": "2026-02-20", "description": "Read chapter 7.", "url": null, "estimatedMinutes": 60 }
   ],
   "initial_user_message": "What should I do now?",
-  "expected": { "expected_selected_assignment_id": "a-soon" }
+  "expected": { "expected_selected_assignment_id": "a-soon", "expected_selected_assignment_id_turn": 0 }
 }
 
 

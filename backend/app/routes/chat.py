@@ -43,6 +43,72 @@ def _sanitize_user_only_summary(summary: str) -> str:
     lines = [ln.strip() for ln in summary.splitlines() if ln.strip().startswith("U:")]
     return "\n".join(lines).strip()
 
+def _is_completion_utterance(text: str) -> bool:
+    t = (text or "").strip().lower()
+    if not t:
+        return False
+    # English + Swedish lightweight detection.
+    return any(
+        k in t
+        for k in [
+            "i finished",
+            "i've finished",
+            "i have finished",
+            "finished",
+            "i did it",
+            "done",
+            "completed",
+            "submitted",
+            "turned in",
+            "handed in",
+            "klar",
+            "färdig",
+            "fardig",
+            "lämnade in",
+            "lamnade in",
+            "inlämnad",
+            "inlamnad",
+        ]
+    )
+
+def _best_mark_done_candidate_id(*, user_text: str, candidates: list[dict]) -> Optional[str]:
+    """
+    Heuristic: if the user indicates completion and there is a single clear match among candidates,
+    return that candidate id; otherwise None (ambiguous).
+    """
+    ut = (user_text or "").lower()
+    if not ut:
+        return None
+    scored: list[tuple[int, str]] = []
+    for c in candidates:
+        cid = c.get("id")
+        title = str(c.get("title") or "").lower()
+        course = str(c.get("courseName") or "").lower()
+        if not isinstance(cid, str) or not cid:
+            continue
+        score = 0
+        if title and title in ut:
+            score += 3
+        if course and course in ut:
+            score += 2
+        # Add a small boost for title keyword overlap.
+        for w in title.replace(":", " ").replace("-", " ").split():
+            if len(w) >= 4 and w in ut:
+                score += 1
+                break
+        if score > 0:
+            scored.append((score, cid))
+    if not scored:
+        return None
+    scored.sort(reverse=True)
+    best_score, best_id = scored[0]
+    # Require a reasonably strong, unique match.
+    if best_score < 2:
+        return None
+    if len(scored) >= 2 and scored[1][0] == best_score:
+        return None
+    return best_id
+
 def _update_rolling_summary(prev: str, user_text: str, assistant_text: str, *, max_chars: int = 1200) -> str:
     """
     Rolling summary used as *optional* context for the coach prompt.
@@ -278,15 +344,28 @@ async def chat_send(
             if selected_assignment_id and selected_assignment_id not in candidate_ids:
                 raise HTTPException(status_code=502, detail="OpenAI returned invalid selection")
 
-        # Map assignment selection to best_next_action plan item (keep response compatible with iOS).
+    # Safety rail: on acknowledgement, if the model returns null selection, continue last-selected thread.
+    if ack and last_selected_assignment_id and not selected_assignment_id:
+        if last_selected_assignment_id in candidate_ids:
+            selected_assignment_id = last_selected_assignment_id
+            decision.selected_assignment_id = last_selected_assignment_id
+
+    # Safety rail: if the user indicates completion but model didn't set mark_done, auto-mark if unambiguous.
+    mark_done_assignment_id = getattr(decision, "mark_done_assignment_id", None)
+    if not mark_done_assignment_id and _is_completion_utterance(user_text):
+        inferred = _best_mark_done_candidate_id(user_text=user_text, candidates=candidates)
+        if inferred:
+            mark_done_assignment_id = inferred
+            decision.mark_done_assignment_id = inferred
+
+    # Map assignment selection to best_next_action plan item (keep response compatible with iOS).
+    if selected_assignment_id:
         best_next_action = next(
             (it for it in plan_items if it.sourceAssignmentId == selected_assignment_id and it.status != "done"),
             None,
         )
 
     # Optional: persist done status.
-    # Optional: persist done status.
-    mark_done_assignment_id = getattr(decision, "mark_done_assignment_id", None)
     if mark_done_assignment_id:
         set_assignment_status(
             user_id=user_id,

@@ -38,6 +38,11 @@ Clarifying questions:
 - Ask at most ONE question when necessary.
 - If candidates are empty or insufficient, say so plainly and ask one question that helps retrieve missing context (e.g., which subject, or ask them to paste the assignment line).
 
+Ambiguous preferences (example: “easy”):
+- If the student says they want something “easy” (or “something easy”) without naming a subject or task:
+  - Ask exactly ONE clarifying question about what “easy” means for them (short time vs low effort vs preferred subject).
+  - Set selected_assignment_id = null until they clarify.
+
 Decision JSON requirements:
 - You MUST include exactly one valid JSON object with the schema below.
 - Do not include any other curly braces outside that JSON object.

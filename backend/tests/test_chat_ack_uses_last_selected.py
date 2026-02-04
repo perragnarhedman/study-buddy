@@ -79,3 +79,60 @@ def test_chat_ack_restricts_candidates_to_last_selected(tmp_path, monkeypatch: p
     assert r.json()["best_next_action"]["id"] == "a2-1"
 
 
+def test_chat_ack_rail_fills_missing_selection_from_last_selected(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """
+    Safety rail: if the student acknowledges and the model returns selected_assignment_id=null,
+    the server should continue the last-selected assignment anyway.
+    """
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    monkeypatch.setenv("SESSION_SECRET", "test-secret")
+    monkeypatch.setenv("SQLITE_PATH", str(tmp_path / "test.db"))
+    get_settings.cache_clear()
+
+    from app.core.db import set_last_selected_assignment_id
+
+    set_last_selected_assignment_id(user_id="u1", assignment_id="a2", updated_at=1)
+
+    import app.routes.chat as chat_route
+
+    async def fake_select_assignments(_user_id):
+        return (
+            [
+                Assignment(id="a1", title="English", dueDate=None, courseName="English", description=None, url=None, estimatedMinutes=None),
+                Assignment(id="a2", title="Math", dueDate=None, courseName="Math", description=None, url=None, estimatedMinutes=None),
+            ],
+            {"used_classroom": False, "used_fixture": False},
+        )
+
+    monkeypatch.setattr(chat_route, "select_assignments", fake_select_assignments)
+
+    async def fake_coach_decide(**kwargs) -> CoachDecision:
+        # Model fails to keep selection on ack; rail should recover using last_selected.
+        return CoachDecision(
+            reply_language="sv",
+            assistant_text="Okej.",
+            selected_assignment_id=None,
+        )
+
+    monkeypatch.setattr(chat_route, "coach_decide", fake_coach_decide)
+
+    token = issue_session_token("u1")
+    client = TestClient(app)
+    r = client.post(
+        "/chat/send",
+        headers={"Authorization": f"Bearer {token}"},
+        json={
+            "user_message": "Okej",
+            "current_plan": {
+                "weekStart": "2026-01-19",
+                "items": [
+                    {"id": "a1-1", "title": "English", "dueDate": None, "estimatedMinutes": 15, "status": "todo", "sourceAssignmentId": "a1"},
+                    {"id": "a2-1", "title": "Math", "dueDate": None, "estimatedMinutes": 15, "status": "todo", "sourceAssignmentId": "a2"},
+                ],
+            },
+        },
+    )
+    assert r.status_code == 200
+    assert r.json()["best_next_action"]["id"] == "a2-1"
+
+
