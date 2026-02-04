@@ -72,6 +72,19 @@ final class APIClient {
         return decoded
     }
 
+    func resetConversation(sessionToken: String?) async throws {
+        let u = try url("chat/reset")
+        var req = URLRequest(url: u)
+        req.httpMethod = "POST"
+        if let token = sessionToken, !token.isEmpty {
+            req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
+        let (_, resp) = try await URLSession.shared.data(for: req)
+        guard let http = resp as? HTTPURLResponse else { throw APIError.badStatus(-1) }
+        if http.statusCode == 401 { throw APIError.unauthorized }
+        guard (200..<300).contains(http.statusCode) else { throw APIError.badStatus(http.statusCode) }
+    }
+
     func googleAuthStart() async throws -> GoogleAuthStartResponse {
         let u = try url("auth/google/start")
         var req = URLRequest(url: u)

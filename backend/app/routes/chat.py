@@ -3,7 +3,7 @@ import time
 from datetime import datetime, timezone
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import ValidationError
 
 from app.models.schemas import (
@@ -21,6 +21,7 @@ from app.core.db import (
     get_last_selected_assignment_id,
     get_last_selected_plan_item_id,
     get_user_state,
+    reset_conversation_state,
     set_assignment_status,
     set_last_selected_assignment_id,
     set_last_selected_plan_item_id,
@@ -345,5 +346,19 @@ async def chat_send(
         assistant_message=assistant_message,
         best_next_action=best_next_action,
     )
+
+
+@router.post("/chat/reset")
+async def chat_reset(
+    *,
+    clear_assignment_status: bool = Query(default=False),
+    ctx: AuthContext = Depends(require_user_id),
+) -> dict:
+    """
+    Reset the conversation state for the authenticated user.
+    Intended for debugging and test harness workflows.
+    """
+    reset_conversation_state(user_id=ctx.user_id, clear_assignment_status=clear_assignment_status)
+    return {"status": "ok"}
 
 

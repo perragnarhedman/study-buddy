@@ -26,6 +26,30 @@ final class AppStore: ObservableObject {
 
     private var api: APIClient { APIClient(baseURLString: baseURL) }
 
+    func resetConversation() async {
+        guard !useStubData else {
+            messages = []
+            bestNextActionFromChat = nil
+            chatErrorMessage = nil
+            chatInfoMessage = "Conversation reset."
+            return
+        }
+        do {
+            try await api.resetConversation(sessionToken: sessionToken)
+            messages = []
+            bestNextActionFromChat = nil
+            chatErrorMessage = nil
+            chatInfoMessage = "Conversation reset."
+        } catch {
+            if let apiError = error as? APIError, case .unauthorized = apiError {
+                authErrorMessage = "Please sign in to use Study Buddy."
+                chatErrorMessage = "Please sign in (Settings → Connect Google Classroom)."
+            } else {
+                chatErrorMessage = "Could not reset conversation. Check backend is running."
+            }
+        }
+    }
+
     func loadWeeklyPlan(preserveChatAction: Bool = false) async {
         if useStubData {
             weeklyPlan = Self.stubWeeklyPlan()

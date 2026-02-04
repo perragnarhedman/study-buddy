@@ -73,6 +73,13 @@ struct DebugSettingsView: View {
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
+
+                Section("Chat") {
+                    Button("Reset conversation") {
+                        Task { await store.resetConversation() }
+                    }
+                    .disabled(store.useStubData == false && (store.sessionToken ?? "").isEmpty)
+                }
             }
             .navigationTitle("Debug Settings")
             .navigationBarTitleDisplayMode(.inline)

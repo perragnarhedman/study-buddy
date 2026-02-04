@@ -177,6 +177,32 @@ def append_chat_history(*, user_id: str, role: str, text: str, created_at: int) 
         )
 
 
+def reset_conversation_state(*, user_id: str, clear_assignment_status: bool = False) -> None:
+    """
+    Reset per-user conversation state so the coach starts fresh.
+    - Clears chat history
+    - Clears conversation_summary and last-selected ids
+    - Optionally clears assignment_status (useful for test harnesses)
+    """
+    conn = get_conn()
+    with conn:
+        conn.execute("DELETE FROM chat_history WHERE user_id=?", (user_id,))
+        conn.execute(
+            """
+            INSERT INTO user_state (user_id, last_selected_plan_item_id, last_selected_assignment_id, conversation_summary, updated_at)
+            VALUES (?, NULL, NULL, NULL, strftime('%s','now'))
+            ON CONFLICT(user_id) DO UPDATE SET
+              last_selected_plan_item_id=NULL,
+              last_selected_assignment_id=NULL,
+              conversation_summary=NULL,
+              updated_at=strftime('%s','now')
+            """,
+            (user_id,),
+        )
+        if clear_assignment_status:
+            conn.execute("DELETE FROM assignment_status WHERE user_id=?", (user_id,))
+
+
 def get_chat_history(*, user_id: str, limit: int = 10) -> list[dict]:
     conn = get_conn()
     rows = conn.execute(
