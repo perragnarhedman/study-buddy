@@ -1,0 +1,15 @@
+{
+  "scenario_id": "ext-009",
+  "title": "Due-soon task should be prioritized when user asks what to do now",
+  "language": "en",
+  "persona": { "grade": 8, "motivation": "medium", "attention": "focused", "style": "short" },
+  "constraints": { "time_available_minutes": 20, "max_turns": 2 },
+  "assignments": [
+    { "id": "a-soon", "title": "Science quiz prep", "courseName": "Science", "dueDate": "2026-02-05", "description": "Review notes.", "url": null, "estimatedMinutes": 45 },
+    { "id": "a-later", "title": "History reading", "courseName": "History", "dueDate": "2026-02-20", "description": "Read chapter 7.", "url": null, "estimatedMinutes": 60 }
+  ],
+  "initial_user_message": "What should I do now?",
+  "expected": { "expected_selected_assignment_id": "a-soon" }
+}
+
+

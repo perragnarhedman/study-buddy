@@ -1,0 +1,21 @@
+{
+  "scenario_id": "ext-005",
+  "title": "Switching subject after a recommendation (non-ack) should follow latest message",
+  "language": "sv",
+  "persona": { "grade": 9, "motivation": "low", "attention": "distracted", "style": "short" },
+  "constraints": { "time_available_minutes": 20, "max_turns": 4 },
+  "assignments": [
+    { "id": "a-eng", "title": "Engelska: skriv utkast", "courseName": "English", "dueDate": "2026-02-20", "description": "Skriv ett första utkast.", "url": null, "estimatedMinutes": 90 },
+    { "id": "a-math", "title": "Matte: kapitel 6", "courseName": "Math", "dueDate": "2026-02-18", "description": "Gör uppgift 1-12.", "url": null, "estimatedMinutes": 60 }
+  ],
+  "user_messages": [
+    "Hjälp mig välja vad jag ska göra nu.",
+    "Faktiskt, jag vill göra matte nu."
+  ],
+  "initial_user_message": "Hjälp mig välja vad jag ska göra nu.",
+  "expected": {
+    "expected_selected_assignment_id": "a-math"
+  }
+}
+
+

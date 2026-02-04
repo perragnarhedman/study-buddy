@@ -50,10 +50,18 @@ async def run_scenario(*, scenario: Scenario, config: RunConfig) -> RunResult:
     user_state_json = "{}"
 
     state = StudentState()
-    user_msg = scenario.initial_user_message
+    script = list(scenario.user_messages or [])
+    if not script:
+        user_msg = scenario.initial_user_message
+    else:
+        user_msg = script.pop(0)
 
     selected_any = False
     failures: List[str] = []
+    last_selected: Optional[str] = None
+    last_mark_done: Optional[str] = None
+    last_reply_language: Optional[str] = None
+    last_assistant_text: str = ""
 
     for turn_idx in range(config.max_turns):
         conversation_history.append({"role": "user", "text": user_msg})
@@ -104,6 +112,10 @@ async def run_scenario(*, scenario: Scenario, config: RunConfig) -> RunResult:
         selected = out.selected_assignment_id
         if selected:
             selected_any = True
+        last_selected = selected
+        last_mark_done = getattr(decision, "mark_done_assignment_id", None)
+        last_reply_language = getattr(decision, "reply_language", None)
+        last_assistant_text = getattr(decision, "assistant_text", "") or ""
 
         tw.write_event(
             {
@@ -132,16 +144,37 @@ async def run_scenario(*, scenario: Scenario, config: RunConfig) -> RunResult:
             failures.extend(hc.failures)
 
         # Student step
-        nxt = next_user_message(lang=scenario.language, state=state, coach_selected_assignment_id=selected)
+        if script:
+            nxt = script.pop(0)
+        else:
+            nxt = next_user_message(lang=scenario.language, state=state, coach_selected_assignment_id=selected)
         if not nxt:
             break
         user_msg = nxt
 
     # Scenario-level expectations
-    if scenario.expected.require_any_selection and not selected_any:
-        failures.append("expected_selection_missing")
-    if scenario.expected.require_no_selection and selected_any:
-        failures.append("expected_no_selection_but_got_selection")
+    if config.enforce_expected:
+        if scenario.expected.require_any_selection and not selected_any:
+            failures.append("expected_selection_missing")
+        if scenario.expected.require_no_selection and selected_any:
+            failures.append("expected_no_selection_but_got_selection")
+        if scenario.expected.expected_selected_assignment_id and last_selected != scenario.expected.expected_selected_assignment_id:
+            failures.append("expected_selected_assignment_id_mismatch")
+        if scenario.expected.forbidden_selected_assignment_ids and last_selected in set(scenario.expected.forbidden_selected_assignment_ids):
+            failures.append("selected_assignment_id_forbidden")
+        if scenario.expected.expected_mark_done_assignment_id and last_mark_done != scenario.expected.expected_mark_done_assignment_id:
+            failures.append("expected_mark_done_assignment_id_mismatch")
+        if scenario.expected.expected_reply_language and last_reply_language != scenario.expected.expected_reply_language:
+            failures.append("expected_reply_language_mismatch")
+        if scenario.expected.assistant_text_must_contain:
+            for s in scenario.expected.assistant_text_must_contain:
+                if s and s not in last_assistant_text:
+                    failures.append("assistant_text_missing_expected_substring")
+                    break
+        if scenario.expected.max_question_marks is not None:
+            qm = last_assistant_text.count("?")
+            if qm > int(scenario.expected.max_question_marks):
+                failures.append("assistant_text_too_many_questions")
 
     ok = len(failures) == 0
     tw.write_summary(

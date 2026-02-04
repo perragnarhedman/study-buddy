@@ -1,0 +1,19 @@
+{
+  "scenario_id": "ext-008",
+  "title": "Overview with many assignments should not select a specific assignment",
+  "language": "sv",
+  "persona": { "grade": 8, "motivation": "medium", "attention": "focused", "style": "chatty" },
+  "constraints": { "time_available_minutes": 10, "max_turns": 2 },
+  "assignments": [
+    { "id": "a1", "title": "Engelska: läsning", "courseName": "English", "dueDate": "2026-02-10", "description": null, "url": null, "estimatedMinutes": 30 },
+    { "id": "a2", "title": "Engelska: skrivuppgift", "courseName": "English", "dueDate": "2026-02-14", "description": null, "url": null, "estimatedMinutes": 60 },
+    { "id": "a3", "title": "Matte: kapitel 5", "courseName": "Math", "dueDate": "2026-02-11", "description": null, "url": null, "estimatedMinutes": 45 },
+    { "id": "a4", "title": "Matte: problemlista", "courseName": "Math", "dueDate": "2026-02-16", "description": null, "url": null, "estimatedMinutes": 45 },
+    { "id": "a5", "title": "Historia: frågor", "courseName": "History", "dueDate": "2026-02-12", "description": null, "url": null, "estimatedMinutes": 40 },
+    { "id": "a6", "title": "NO: labbrapport", "courseName": "Science", "dueDate": "2026-02-18", "description": null, "url": null, "estimatedMinutes": 50 }
+  ],
+  "initial_user_message": "Vad har jag kvar att göra?",
+  "expected": { "require_no_selection": true }
+}
+
+

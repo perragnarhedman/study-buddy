@@ -1,0 +1,12 @@
+{
+  "scenario_id": "ext-013",
+  "title": "If there are no candidates, coach should not hallucinate a selection",
+  "language": "en",
+  "persona": { "grade": 9, "motivation": "low", "attention": "distracted", "style": "short" },
+  "constraints": { "time_available_minutes": 5, "max_turns": 1 },
+  "assignments": [],
+  "initial_user_message": "What should I do now?",
+  "expected": { "require_no_selection": true }
+}
+
+

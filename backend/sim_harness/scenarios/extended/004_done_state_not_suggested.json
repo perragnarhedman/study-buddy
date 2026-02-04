@@ -1,0 +1,19 @@
+{
+  "scenario_id": "ext-004",
+  "title": "Done-state assignments should not be suggested",
+  "language": "sv",
+  "persona": { "grade": 8, "motivation": "medium", "attention": "focused", "style": "short" },
+  "constraints": { "time_available_minutes": 20, "max_turns": 4 },
+  "assignments": [
+    { "id": "a-done", "title": "Engelska: lämna in uppsats", "courseName": "English", "dueDate": "2026-02-10", "description": "Lämna in i Classroom.", "url": null, "estimatedMinutes": 60, "status": "done" },
+    { "id": "a-todo", "title": "Matte: problemlista", "courseName": "Math", "dueDate": "2026-02-12", "description": "Uppgifter 1-10.", "url": null, "estimatedMinutes": 45, "status": "todo" }
+  ],
+  "initial_user_message": "Vad ska jag göra nu?",
+  "expected": {
+    "require_any_selection": true,
+    "forbidden_selected_assignment_ids": ["a-done"],
+    "expected_selected_assignment_id": "a-todo"
+  }
+}
+
+

@@ -30,6 +30,18 @@ class ScenarioExpected(BaseModel):
     require_any_selection: bool = False
     # If set, we expect the coach to NOT select an assignment (overview/greeting).
     require_no_selection: bool = False
+    # If set, the final coach turn must select this assignment id.
+    expected_selected_assignment_id: Optional[str] = None
+    # Coach must not select any of these assignment ids on the final coach turn.
+    forbidden_selected_assignment_ids: List[str] = Field(default_factory=list)
+    # If set, the final coach turn must mark this assignment as done.
+    expected_mark_done_assignment_id: Optional[str] = None
+    # If set, the final coach turn must reply in this language.
+    expected_reply_language: Optional[Language] = None
+    # If set, the final coach assistant_text must contain all of these substrings.
+    assistant_text_must_contain: List[str] = Field(default_factory=list)
+    # If set, limit number of question marks in final coach assistant_text.
+    max_question_marks: Optional[int] = None
 
 
 class Scenario(BaseModel):
@@ -41,6 +53,8 @@ class Scenario(BaseModel):
     # Raw Classroom-style assignments (source of truth for coach).
     assignments: List[Dict[str, Any]]
     initial_user_message: str
+    # Optional scripted user messages (turn-by-turn). If provided, replaces the student simulator.
+    user_messages: Optional[List[str]] = None
     expected: ScenarioExpected = Field(default_factory=ScenarioExpected)
 
 
@@ -55,6 +69,7 @@ class RunConfig(BaseModel):
     max_retries: int = 1  # be-sim.13 default
     use_openai_coach: bool = True
     use_openai_judge: bool = False
+    enforce_expected: bool = True
     output_dir: str = "sim_runs"
     created_at_iso: str = Field(default_factory=lambda: datetime.utcnow().isoformat() + "Z")
 

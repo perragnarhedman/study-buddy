@@ -1,0 +1,15 @@
+{
+  "scenario_id": "ext-010",
+  "title": "If user says they finished something, coach should mark it done",
+  "language": "en",
+  "persona": { "grade": 9, "motivation": "medium", "attention": "focused", "style": "short" },
+  "constraints": { "time_available_minutes": 5, "max_turns": 1 },
+  "assignments": [
+    { "id": "a-eng", "title": "English essay draft", "courseName": "English", "dueDate": "2026-02-20", "description": "Write a first draft.", "url": null, "estimatedMinutes": 90 },
+    { "id": "a-math", "title": "Math worksheet", "courseName": "Math", "dueDate": "2026-02-18", "description": "Problems 1-10.", "url": null, "estimatedMinutes": 45 }
+  ],
+  "initial_user_message": "I finished the English essay.",
+  "expected": { "expected_mark_done_assignment_id": "a-eng" }
+}
+
+

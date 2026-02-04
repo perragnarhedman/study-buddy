@@ -22,3 +22,23 @@ def test_sim_harness_quick_suite_is_deterministic(tmp_path) -> None:
     assert out["aggregate"]["failed"] == 0
 
 
+def test_sim_harness_extended_scenarios_load() -> None:
+    scenarios = load_scenarios(suite="extended")
+    assert len(scenarios) >= 10
+
+
+def test_sim_harness_extended_suite_runs_in_mock_mode_without_enforcing_expectations(tmp_path) -> None:
+    scenarios = load_scenarios(suite="extended")
+    cfg = RunConfig(
+        suite="extended",
+        max_turns=8,
+        max_retries=1,
+        use_openai_coach=False,
+        use_openai_judge=False,
+        enforce_expected=False,
+        output_dir=str(tmp_path / "sim_runs"),
+    )
+    out = asyncio.run(run_suite(scenarios=scenarios, config=cfg))
+    assert out["aggregate"]["total"] >= 10
+
+

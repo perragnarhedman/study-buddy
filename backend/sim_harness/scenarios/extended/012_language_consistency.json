@@ -1,0 +1,14 @@
+{
+  "scenario_id": "ext-012",
+  "title": "Reply language should match Swedish input",
+  "language": "sv",
+  "persona": { "grade": 8, "motivation": "medium", "attention": "focused", "style": "short" },
+  "constraints": { "time_available_minutes": 10, "max_turns": 1 },
+  "assignments": [
+    { "id": "a1", "title": "Engelska: skriv utkast", "courseName": "English", "dueDate": "2026-02-20", "description": null, "url": null, "estimatedMinutes": 60 }
+  ],
+  "initial_user_message": "Jag vill göra engelska idag.",
+  "expected": { "expected_reply_language": "sv" }
+}
+
+

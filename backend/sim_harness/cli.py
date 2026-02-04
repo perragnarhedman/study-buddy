@@ -20,6 +20,13 @@ def _parser() -> argparse.ArgumentParser:
     quick.add_argument("--no-openai-coach", action="store_true")
     quick.add_argument("--output-dir", type=str, default="sim_runs")
 
+    ext = sub.add_parser("extended", help="Run the extended suite (additional scenarios)")
+    ext.add_argument("--max-turns", type=int, default=8)
+    ext.add_argument("--max-retries", type=int, default=1)
+    ext.add_argument("--no-openai-coach", action="store_true")
+    ext.add_argument("--ignore-expected", action="store_true")
+    ext.add_argument("--output-dir", type=str, default="sim_runs")
+
     return p
 
 
@@ -41,11 +48,31 @@ async def _run_quick(args: argparse.Namespace) -> int:
     return 0 if out["aggregate"]["failed"] == 0 else 1
 
 
+async def _run_extended(args: argparse.Namespace) -> int:
+    cfg = RunConfig(
+        suite="extended",
+        max_turns=int(args.max_turns),
+        max_retries=int(args.max_retries),
+        use_openai_coach=(not args.no_openai_coach),
+        enforce_expected=(not args.ignore_expected),
+        output_dir=str(args.output_dir),
+    )
+    scenarios = load_scenarios(suite="extended")
+    out = await run_suite(scenarios=scenarios, config=cfg)
+    print(json.dumps(out["aggregate"], ensure_ascii=False))
+    for r in out["results"]:
+        if not r["ok"]:
+            print(f"FAIL {r['scenario_id']}: {r['failures']} (run_dir={r['run_dir']})")
+    return 0 if out["aggregate"]["failed"] == 0 else 1
+
+
 def main(argv: list[str] | None = None) -> int:
     argv = argv if argv is not None else sys.argv[1:]
     args = _parser().parse_args(argv)
     if args.cmd == "quick":
         return asyncio.run(_run_quick(args))
+    if args.cmd == "extended":
+        return asyncio.run(_run_extended(args))
     raise SystemExit(2)
 
 

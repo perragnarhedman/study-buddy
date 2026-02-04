@@ -1,0 +1,14 @@
+{
+  "scenario_id": "ext-011",
+  "title": "If user asks where the doc is, coach should reference the provided URL",
+  "language": "en",
+  "persona": { "grade": 8, "motivation": "medium", "attention": "focused", "style": "short" },
+  "constraints": { "time_available_minutes": 5, "max_turns": 1 },
+  "assignments": [
+    { "id": "a1", "title": "English worksheet", "courseName": "English", "dueDate": "2026-02-10", "description": "Attachments:\\n- Worksheet: https://example.com/worksheet", "url": "https://example.com/worksheet", "estimatedMinutes": 30 }
+  ],
+  "initial_user_message": "Where is the doc?",
+  "expected": { "assistant_text_must_contain": ["https://example.com/worksheet"] }
+}
+
+

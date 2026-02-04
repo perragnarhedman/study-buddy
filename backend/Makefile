@@ -12,4 +12,10 @@ sim-quick:
 sim-quick-openai:
 	python3 -m sim_harness.cli quick
 
+sim-extended:
+	python3 -m sim_harness.cli extended --no-openai-coach --ignore-expected
+
+sim-extended-openai:
+	python3 -m sim_harness.cli extended
+
 

@@ -1,0 +1,18 @@
+{
+  "scenario_id": "ext-006",
+  "title": "Ambiguous preference should ask at most one clarifying question",
+  "language": "en",
+  "persona": { "grade": 8, "motivation": "medium", "attention": "focused", "style": "short" },
+  "constraints": { "time_available_minutes": 15, "max_turns": 2 },
+  "assignments": [
+    { "id": "a1", "title": "History reading", "courseName": "History", "dueDate": "2026-02-20", "description": null, "url": null, "estimatedMinutes": 45 },
+    { "id": "a2", "title": "Math worksheet", "courseName": "Math", "dueDate": "2026-02-18", "description": null, "url": null, "estimatedMinutes": 30 }
+  ],
+  "initial_user_message": "I want something easy.",
+  "expected": {
+    "require_no_selection": true,
+    "max_question_marks": 1
+  }
+}
+
+

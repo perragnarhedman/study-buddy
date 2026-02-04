@@ -1,0 +1,17 @@
+{
+  "scenario_id": "ext-007",
+  "title": "Low-context assignment should not invent details",
+  "language": "en",
+  "persona": { "grade": 9, "motivation": "low", "attention": "distracted", "style": "short" },
+  "constraints": { "time_available_minutes": 10, "max_turns": 2 },
+  "assignments": [
+    { "id": "a1", "title": "Essay", "courseName": "English", "dueDate": null, "description": null, "url": null, "estimatedMinutes": null }
+  ],
+  "initial_user_message": "Help me start.",
+  "expected": {
+    "require_any_selection": true,
+    "expected_selected_assignment_id": "a1"
+  }
+}
+
+

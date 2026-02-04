@@ -35,7 +35,7 @@ def build_candidates(assignments: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
                 "estimatedMinutes": a.get("estimatedMinutes") if isinstance(a.get("estimatedMinutes"), int) else None,
                 "description": _truncate(a.get("description"), 1000),
                 "url": a.get("url") if isinstance(a.get("url"), str) else None,
-                "status": "todo",
+                "status": a.get("status") if a.get("status") in ("todo", "doing", "done") else "todo",
                 "is_last_selected": False,
                 "is_due_soon": False,
             }
