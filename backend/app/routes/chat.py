@@ -33,6 +33,16 @@ from app.services.debug_export import export_chat_trace
 
 router = APIRouter()
 
+def _sanitize_user_only_summary(summary: str) -> str:
+    """
+    Safety: legacy summaries may contain assistant lines ("A: ...") from older versions.
+    For prompt robustness, keep only user lines ("U: ...").
+    """
+    if not isinstance(summary, str) or not summary.strip():
+        return ""
+    lines = [ln.strip() for ln in summary.splitlines() if ln.strip().startswith("U:")]
+    return "\n".join(lines).strip()
+
 def _update_rolling_summary(prev: str, user_text: str, assistant_text: str, *, max_chars: int = 1200) -> str:
     """
     Rolling summary used as *optional* context for the coach prompt.
@@ -177,7 +187,13 @@ async def chat_send(
     hist = get_chat_history(user_id=user_id, limit=10)
     conversation_history = "\n".join([f"{h['role']}: {h['text']}" for h in hist])
     user_state_obj = get_user_state(user_id=user_id)
-    conversation_summary = str(user_state_obj.get("conversation_summary") or "")
+    # Sanitize legacy summaries before injecting into prompts (user-only lines).
+    conversation_summary = _sanitize_user_only_summary(str(user_state_obj.get("conversation_summary") or ""))
+    if conversation_summary:
+        user_state_obj["conversation_summary"] = conversation_summary
+    else:
+        # Avoid leaking legacy assistant text via user_state_json.
+        user_state_obj.pop("conversation_summary", None)
     user_state_json = json.dumps(user_state_obj, ensure_ascii=False)
 
     async def _call_coach(extra_note: str = ""):

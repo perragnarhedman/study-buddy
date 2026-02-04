@@ -39,5 +39,5 @@ Decision JSON (must be valid JSON; no extra keys):
   "mark_done_assignment_id": null,
   "selected_plan_item_id": null,
   "mark_done_plan_item_id": null,
-  "reply_language": "sv"
+  "reply_language": null
 }

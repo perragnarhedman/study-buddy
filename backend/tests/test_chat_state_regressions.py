@@ -115,3 +115,71 @@ def test_conversation_summary_does_not_persist_assistant_text(tmp_path, monkeypa
     assert "A:" not in summary
 
 
+def test_conversation_summary_is_sanitized_on_read_before_prompt(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """
+    Regression: legacy conversation_summary may contain assistant lines ("A: ...").
+    We must sanitize on read so the coach never sees assistant lines via conversation_summary or user_state_json.
+    """
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    monkeypatch.setenv("SESSION_SECRET", "test-secret")
+    monkeypatch.setenv("SQLITE_PATH", str(tmp_path / "test.db"))
+    get_settings.cache_clear()
+
+    from app.core.db import upsert_user_state
+
+    upsert_user_state(
+        user_id="u1",
+        conversation_summary="U: I want math\nA: You finished math already!\nU: Actually english",
+        updated_at=1,
+    )
+
+    import app.routes.chat as chat_route
+    from app.models.schemas import Assignment
+
+    async def fake_select_assignments(_user_id):
+        return (
+            [Assignment(id="a1", title="Math worksheet", dueDate=None, courseName="Math")],
+            {"used_classroom": False, "used_fixture": False},
+        )
+
+    monkeypatch.setattr(chat_route, "select_assignments", fake_select_assignments)
+
+    async def fake_coach_decide(**kwargs) -> CoachDecision:
+        cs = str(kwargs.get("conversation_summary") or "")
+        us = str(kwargs.get("user_state_json") or "")
+        assert "A:" not in cs
+        assert "A:" not in us
+        assert "U: I want math" in cs
+        return CoachDecision(
+            assistant_text="OK",
+            reply_language="en",
+            selected_assignment_id=None,
+        )
+
+    monkeypatch.setattr(chat_route, "coach_decide", fake_coach_decide)
+
+    client = TestClient(app)
+    token = issue_session_token("u1")
+    r = client.post(
+        "/chat/send",
+        headers={"Authorization": f"Bearer {token}"},
+        json={
+            "user_message": "Hello",
+            "current_plan": {
+                "weekStart": "2026-01-13",
+                "items": [
+                    {
+                        "id": "p1",
+                        "title": "Start x",
+                        "dueDate": None,
+                        "estimatedMinutes": 15,
+                        "status": "todo",
+                        "sourceAssignmentId": "a1",
+                    }
+                ],
+            },
+        },
+    )
+    assert r.status_code == 200
+
+
