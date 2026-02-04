@@ -16,9 +16,14 @@ Set the **Authorized redirect URI** to your backend callback URL:
 
 If you run the backend on a different host/port, update this URI and your `.env`.
 
+#### Render
+If deploying on Render, set the authorized redirect URI to match your Render service domain exactly:
+
+- `https://<your-render-domain>/auth/google/callback`
+
 ### 3) Backend environment variables
 
-Copy `backend/.env.example` to `backend/.env` and fill:
+Use `backend/env.example` as a copy/paste template for local dev env vars, OR set these as Render env vars:
 
 - `GOOGLE_CLIENT_ID`
 - `GOOGLE_CLIENT_SECRET` (required for “Web application” clients)
