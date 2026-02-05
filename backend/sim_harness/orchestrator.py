@@ -218,6 +218,11 @@ async def run_scenario(*, scenario: Scenario, config: RunConfig) -> RunResult:
                 if s and s not in last_assistant_text:
                     failures.append("assistant_text_missing_expected_substring")
                     break
+        if getattr(scenario.expected, "assistant_text_forbidden_substrings", None):
+            for s in scenario.expected.assistant_text_forbidden_substrings:
+                if s and s in last_assistant_text:
+                    failures.append("assistant_text_contains_forbidden_substring")
+                    break
         if scenario.expected.max_question_marks is not None:
             qm = last_assistant_text.count("?")
             if qm > int(scenario.expected.max_question_marks):

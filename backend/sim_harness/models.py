@@ -43,6 +43,8 @@ class ScenarioExpected(BaseModel):
     expected_reply_language: Optional[Language] = None
     # If set, the final coach assistant_text must contain all of these substrings.
     assistant_text_must_contain: List[str] = Field(default_factory=list)
+    # If set, the final coach assistant_text must NOT contain any of these substrings.
+    assistant_text_forbidden_substrings: List[str] = Field(default_factory=list)
     # If set, limit number of question marks in final coach assistant_text.
     max_question_marks: Optional[int] = None
 

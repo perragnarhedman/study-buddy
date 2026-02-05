@@ -1,17 +1,16 @@
 {
-  "scenario_id": "ext-007",
-  "title": "Low-context assignment should not invent details",
+  "scenario_id": "ext-014",
+  "title": "Low-context but user names assignment: select it and give a safe first step",
   "language": "en",
   "persona": { "grade": 9, "motivation": "low", "attention": "distracted", "style": "short" },
-  "constraints": { "time_available_minutes": 10, "max_turns": 2 },
+  "constraints": { "time_available_minutes": 10, "max_turns": 1 },
   "assignments": [
     { "id": "a1", "title": "Essay", "courseName": "English", "dueDate": null, "description": null, "url": null, "estimatedMinutes": null }
   ],
-  "initial_user_message": "Help me start.",
+  "initial_user_message": "Help me start the English essay.",
   "expected": {
-    "require_no_selection": true,
-    "max_question_marks": 2,
-    "assistant_text_must_contain": ["subject"],
+    "require_any_selection": true,
+    "expected_selected_assignment_id": "a1",
     "assistant_text_forbidden_substrings": ["page", "pages", "chapter", "due", "tomorrow"]
   }
 }
