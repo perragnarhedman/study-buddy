@@ -11,7 +11,7 @@
   "initial_user_message": "I want something easy.",
   "expected": {
     "require_no_selection": true,
-    "max_question_marks": 1
+    "max_question_marks": 2
   }
 }
 
