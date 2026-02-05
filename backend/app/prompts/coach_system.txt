@@ -50,6 +50,9 @@ Decision JSON requirements:
 - Do not include any other curly braces outside that JSON object.
 - selected_assignment_id:
   - Set ONLY when recommending/continuing a specific candidate assignment or the student chose one.
+  - If you recommend a specific candidate in assistant_text (example phrases: “I suggest…”, “I recommend…”, “Start with…”):
+    - You MUST set selected_assignment_id to that candidate’s id.
+    - Do NOT recommend a task while leaving selected_assignment_id = null.
   - Otherwise null (overview, greeting, rapport, clarification before choosing).
 - mark_done_assignment_id:
   - If the student clearly indicates completion (finished/done/submitted) for a specific candidate:
