@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 from typing import Optional, Tuple
 
@@ -9,7 +10,12 @@ from app.services.classroom import fetch_classroom_assignments
 from app.services.planner import stub_assignments
 
 
-FIXTURE_PATH = Path(__file__).resolve().parents[1] / "fixtures" / "assignments.json"
+_DEFAULT_FIXTURE_PATH = Path(__file__).resolve().parents[1] / "fixtures" / "assignments.json"
+
+
+def _fixture_path() -> Path:
+    # Read at runtime so test harnesses can override per run without relying on import timing.
+    return Path(os.environ.get("ASSIGNMENTS_FIXTURE_PATH") or _DEFAULT_FIXTURE_PATH)
 
 
 async def select_assignments(user_id: Optional[str]) -> Tuple[list[Assignment], dict]:
@@ -27,9 +33,10 @@ async def select_assignments(user_id: Optional[str]) -> Tuple[list[Assignment], 
         except Exception:
             print("assignments_source used_classroom=false used_fixture=false fallback_reason=classroom_failed")
 
-    if FIXTURE_PATH.exists():
+    fixture_path = _fixture_path()
+    if fixture_path.exists():
         try:
-            raw = json.loads(FIXTURE_PATH.read_text(encoding="utf-8"))
+            raw = json.loads(fixture_path.read_text(encoding="utf-8"))
             assignments = [Assignment.model_validate(a) for a in raw]
             print("assignments_source used_classroom=false used_fixture=true fallback_reason=none")
             return assignments, {"used_classroom": False, "used_fixture": True}

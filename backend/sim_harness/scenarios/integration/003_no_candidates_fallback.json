@@ -1,0 +1,11 @@
+{
+  "scenario_id": "int-003",
+  "title": "Integration: no candidates fallback returns a safe response",
+  "language": "en",
+  "constraints": { "max_turns": 1 },
+  "assignments": [],
+  "initial_user_message": "What should I do now?",
+  "expected": { "require_no_selection": true }
+}
+
+

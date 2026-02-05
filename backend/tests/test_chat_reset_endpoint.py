@@ -31,3 +31,37 @@ def test_chat_reset_clears_history_and_summary(tmp_path, monkeypatch: pytest.Mon
     assert "conversation_summary" not in get_user_state(user_id="u1")
 
 
+def test_chat_reset_can_clear_preferences(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("SESSION_SECRET", "test-secret")
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    monkeypatch.setenv("SQLITE_PATH", str(tmp_path / "test.db"))
+    get_settings.cache_clear()
+
+    from app.core.db import get_user_state, upsert_user_state
+
+    upsert_user_state(
+        user_id="u1",
+        language_preference="sv",
+        last_intent="recommend",
+        preferred_subject="math",
+        conversation_summary="U: hello",
+        updated_at=2,
+    )
+    assert get_user_state(user_id="u1").get("language_preference") == "sv"
+    assert get_user_state(user_id="u1").get("preferred_subject") == "math"
+
+    client = TestClient(app)
+    token = issue_session_token("u1")
+    r = client.post(
+        "/chat/reset?clear_preferences=true",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert r.status_code == 200
+
+    state = get_user_state(user_id="u1")
+    assert "language_preference" not in state
+    assert "preferred_subject" not in state
+    assert "last_intent" not in state
+    assert "conversation_summary" not in state
+
+

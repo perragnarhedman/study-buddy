@@ -6,6 +6,7 @@ import json
 import sys
 
 from sim_harness.models import RunConfig
+from sim_harness.backend_runner import run_backend_integration_suite
 from sim_harness.orchestrator import run_suite
 from sim_harness.scenarios import load_scenarios
 
@@ -26,6 +27,10 @@ def _parser() -> argparse.ArgumentParser:
     ext.add_argument("--no-openai-coach", action="store_true")
     ext.add_argument("--ignore-expected", action="store_true")
     ext.add_argument("--output-dir", type=str, default="sim_runs")
+
+    backend = sub.add_parser("backend", help="Run the integration suite against real backend /chat/send (in-process)")
+    backend.add_argument("--max-turns", type=int, default=6)
+    backend.add_argument("--output-dir", type=str, default="sim_runs")
 
     return p
 
@@ -66,6 +71,18 @@ async def _run_extended(args: argparse.Namespace) -> int:
     return 0 if out["aggregate"]["failed"] == 0 else 1
 
 
+async def _run_backend(args: argparse.Namespace) -> int:
+    out = await run_backend_integration_suite(
+        output_dir=str(args.output_dir),
+        max_turns=int(args.max_turns),
+    )
+    print(json.dumps(out["aggregate"], ensure_ascii=False))
+    for r in out["results"]:
+        if not r["ok"]:
+            print(f"FAIL {r['scenario_id']}: {r['failures']} (run_dir={r['run_dir']})")
+    return 0 if out["aggregate"]["failed"] == 0 else 1
+
+
 def main(argv: list[str] | None = None) -> int:
     argv = argv if argv is not None else sys.argv[1:]
     args = _parser().parse_args(argv)
@@ -73,6 +90,8 @@ def main(argv: list[str] | None = None) -> int:
         return asyncio.run(_run_quick(args))
     if args.cmd == "extended":
         return asyncio.run(_run_extended(args))
+    if args.cmd == "backend":
+        return asyncio.run(_run_backend(args))
     raise SystemExit(2)
 
 

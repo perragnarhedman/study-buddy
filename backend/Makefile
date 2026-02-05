@@ -18,4 +18,7 @@ sim-extended:
 sim-extended-openai:
 	python3 -m sim_harness.cli extended
 
+sim-backend:
+	python3 -m sim_harness.cli backend
+
 

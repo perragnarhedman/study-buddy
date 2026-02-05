@@ -393,7 +393,13 @@ async def chat_send(
     append_chat_history(user_id=user_id, role="assistant", text=text[:1200], created_at=now_ts + 1)
     upsert_user_state(
         user_id=user_id,
-        language_preference=decision.reply_language,
+        # Persist language preference only when it matches a server-side hint.
+        # This reduces stickiness from a single wrong model reply_language.
+        language_preference=(
+            decision.reply_language
+            if isinstance(decision.reply_language, str) and decision.reply_language == lang_hint
+            else None
+        ),
         last_intent=None,
         conversation_summary=_update_rolling_summary(
             str(user_state_obj.get("conversation_summary") or ""),
@@ -447,13 +453,18 @@ async def chat_send(
 async def chat_reset(
     *,
     clear_assignment_status: bool = Query(default=False),
+    clear_preferences: bool = Query(default=False),
     ctx: AuthContext = Depends(require_user_id),
 ) -> dict:
     """
     Reset the conversation state for the authenticated user.
     Intended for debugging and test harness workflows.
     """
-    reset_conversation_state(user_id=ctx.user_id, clear_assignment_status=clear_assignment_status)
+    reset_conversation_state(
+        user_id=ctx.user_id,
+        clear_assignment_status=clear_assignment_status,
+        clear_preferences=clear_preferences,
+    )
     return {"status": "ok"}
 
 

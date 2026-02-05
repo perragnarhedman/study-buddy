@@ -1,0 +1,15 @@
+{
+  "scenario_id": "int-001",
+  "title": "Integration: ack continues thread via real /chat/send persistence",
+  "language": "en",
+  "constraints": { "max_turns": 2 },
+  "assignments": [
+    { "id": "a1", "title": "English essay draft", "courseName": "English", "dueDate": "2026-02-20", "description": "", "estimatedMinutes": 60 },
+    { "id": "a2", "title": "Math worksheet", "courseName": "Math", "dueDate": "2026-02-18", "description": "", "estimatedMinutes": 30 }
+  ],
+  "user_messages": ["Help me choose what to do now.", "Ok."],
+  "initial_user_message": "Help me choose what to do now.",
+  "expected": { "require_any_selection": true }
+}
+
+

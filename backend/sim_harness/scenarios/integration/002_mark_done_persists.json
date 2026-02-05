@@ -1,0 +1,14 @@
+{
+  "scenario_id": "int-002",
+  "title": "Integration: completion marks done via real /chat/send persistence",
+  "language": "en",
+  "constraints": { "max_turns": 1 },
+  "assignments": [
+    { "id": "a-eng", "title": "English essay draft", "courseName": "English", "dueDate": "2026-02-20", "description": "", "estimatedMinutes": 60 },
+    { "id": "a-math", "title": "Math worksheet", "courseName": "Math", "dueDate": "2026-02-18", "description": "", "estimatedMinutes": 30 }
+  ],
+  "initial_user_message": "I finished the English essay.",
+  "expected": { "expected_mark_done_assignment_id": "a-eng" }
+}
+
+

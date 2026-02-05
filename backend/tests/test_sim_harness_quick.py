@@ -27,6 +27,11 @@ def test_sim_harness_extended_scenarios_load() -> None:
     assert len(scenarios) >= 10
 
 
+def test_sim_harness_integration_suite_loads() -> None:
+    scenarios = load_scenarios(suite="integration")
+    assert len(scenarios) >= 3
+
+
 def test_sim_harness_extended_suite_runs_in_mock_mode_without_enforcing_expectations(tmp_path) -> None:
     scenarios = load_scenarios(suite="extended")
     cfg = RunConfig(

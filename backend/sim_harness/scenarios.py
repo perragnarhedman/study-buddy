@@ -14,6 +14,7 @@ SCENARIOS_DIR = Path(__file__).resolve().parent / "scenarios"
 _SUITE_DIR = {
     "quick": "golden",
     "extended": "extended",
+    "integration": "integration",
 }
 
 
@@ -22,6 +23,7 @@ def load_scenarios(*, suite: str = "quick") -> List[Scenario]:
     Load scenarios from disk. For now:
     - quick: 3 golden scenarios (deterministic bring-up)
     - extended: additional scenarios for broader coverage
+    - integration: scenarios that run against the real backend /chat/send persistence path
     """
     if suite not in _SUITE_DIR:
         raise ValueError(f"unknown_suite:{suite}")
