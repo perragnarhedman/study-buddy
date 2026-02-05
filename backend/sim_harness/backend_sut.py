@@ -124,7 +124,13 @@ def write_fixture_assignments(*, fixture_path: Path, assignments: List[Dict[str,
     fixture_path.write_text(json.dumps(assignments, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
-def prepare_backend_env(*, run_dir: Path, user_id: str, assignments: List[Dict[str, Any]]) -> Tuple[str, Path]:
+def prepare_backend_env(
+    *,
+    run_dir: Path,
+    user_id: str,
+    assignments: List[Dict[str, Any]],
+    offline_deterministic: bool = True,
+) -> Tuple[str, Path]:
     """
     Prepare env for an in-process backend instance:
     - isolate SQLite per run
@@ -135,11 +141,16 @@ def prepare_backend_env(*, run_dir: Path, user_id: str, assignments: List[Dict[s
     fixture_path = run_dir / f"assignments_{user_id}.json"
     os.environ["SQLITE_PATH"] = str(sqlite_path)
     os.environ["ASSIGNMENTS_FIXTURE_PATH"] = str(fixture_path)
-    # Make the in-process backend deterministic and offline.
-    # Note: when not under pytest, get_settings() reads .env; env vars should override it.
-    os.environ["DEBUG_EXPORT_ENABLED"] = "false"
-    os.environ["OPENAI_API_KEY"] = "test-key"  # bypass _require_openai gate
-    os.environ["SESSION_SECRET"] = "test-secret"
+    if offline_deterministic:
+        # Make the in-process backend deterministic and offline.
+        # Note: when not under pytest, get_settings() reads .env; env vars should override it.
+        os.environ["DEBUG_EXPORT_ENABLED"] = "false"
+        os.environ["OPENAI_API_KEY"] = "test-key"  # bypass _require_openai gate
+        os.environ.setdefault("SESSION_SECRET", "test-secret")
+    else:
+        # Real OpenAI mode: do not override OPENAI_API_KEY or DEBUG_EXPORT_ENABLED.
+        # Ensure we have a session secret so we can issue deterministic session tokens locally.
+        os.environ.setdefault("SESSION_SECRET", "test-secret")
     write_fixture_assignments(fixture_path=fixture_path, assignments=assignments)
     return str(sqlite_path), fixture_path
 

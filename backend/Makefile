@@ -21,4 +21,7 @@ sim-extended-openai:
 sim-backend:
 	python3 -m sim_harness.cli backend
 
+sim-backend-openai:
+	python3 -m sim_harness.cli backend --use-openai-coach
+
 

@@ -31,6 +31,18 @@ def _parser() -> argparse.ArgumentParser:
     backend = sub.add_parser("backend", help="Run the integration suite against real backend /chat/send (in-process)")
     backend.add_argument("--max-turns", type=int, default=6)
     backend.add_argument("--output-dir", type=str, default="sim_runs")
+    backend.add_argument(
+        "--use-openai-coach",
+        action="store_true",
+        help="Use real OpenAI coach (no patching). Requires OPENAI_API_KEY.",
+    )
+    backend.add_argument(
+        "--http-base-url",
+        type=str,
+        default="",
+        help="Call an external running backend instead of in-process (requires --session-token).",
+    )
+    backend.add_argument("--session-token", type=str, default="", help="Bearer token for --http-base-url mode.")
 
     return p
 
@@ -75,6 +87,9 @@ async def _run_backend(args: argparse.Namespace) -> int:
     out = await run_backend_integration_suite(
         output_dir=str(args.output_dir),
         max_turns=int(args.max_turns),
+        use_openai_coach=bool(args.use_openai_coach),
+        http_base_url=str(args.http_base_url or "") or None,
+        session_token=str(args.session_token or "") or None,
     )
     print(json.dumps(out["aggregate"], ensure_ascii=False))
     for r in out["results"]:

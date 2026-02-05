@@ -73,7 +73,14 @@ async def _install_deterministic_coach() -> None:
     chat_route.coach_decide_with_raw = deterministic_coach_decide_with_raw  # type: ignore[assignment]
 
 
-async def run_backend_integration_suite(*, output_dir: str = "sim_runs", max_turns: int = 6) -> Dict[str, Any]:
+async def run_backend_integration_suite(
+    *,
+    output_dir: str = "sim_runs",
+    max_turns: int = 6,
+    use_openai_coach: bool = False,
+    http_base_url: Optional[str] = None,
+    session_token: Optional[str] = None,
+) -> Dict[str, Any]:
     scenarios = load_scenarios(suite="integration")
     results: List[Dict[str, Any]] = []
 
@@ -81,22 +88,29 @@ async def run_backend_integration_suite(*, output_dir: str = "sim_runs", max_tur
         tw = TraceWriter.create(output_dir=output_dir)
         start = time.time()
 
-        # Per-scenario isolated backend env + DB.
+        # Per-scenario isolated backend env + DB (in-process mode only).
         user_id = f"sim_{sc.scenario_id}_{tw.run_id}"
-        prepare_backend_env(run_dir=tw.run_dir, user_id=user_id, assignments=sc.assignments)
+        if not http_base_url:
+            prepare_backend_env(
+                run_dir=tw.run_dir,
+                user_id=user_id,
+                assignments=sc.assignments,
+                offline_deterministic=(not use_openai_coach),
+            )
 
         from app.core.config import get_settings
         from app.main import create_app
 
         get_settings.cache_clear()
-        app = create_app()
+        app = create_app() if not http_base_url else None
 
-        # Patch coach to deterministic.
-        await _install_deterministic_coach()
+        # Patch coach to deterministic unless explicitly running with real OpenAI.
+        if not use_openai_coach:
+            await _install_deterministic_coach()
 
         from app.core.auth import issue_session_token
 
-        token = issue_session_token(user_id)
+        token = session_token or issue_session_token(user_id)
 
         tw.write_event(
             {
@@ -104,7 +118,8 @@ async def run_backend_integration_suite(*, output_dir: str = "sim_runs", max_tur
                 "run_id": tw.run_id,
                 "scenario_id": sc.scenario_id,
                 "scenario_title": sc.title,
-                "sut": "backend_inprocess",
+                "sut": "backend_http" if http_base_url else "backend_inprocess",
+                "use_openai_coach": use_openai_coach,
             }
         )
 
@@ -120,7 +135,36 @@ async def run_backend_integration_suite(*, output_dir: str = "sim_runs", max_tur
         failures: List[str] = []
         last_marked_done: List[str] = []
 
-        async with httpx.AsyncClient(app=app, base_url="http://test") as client:
+        if http_base_url and not session_token:
+            failures.append("missing_session_token_for_http_mode")
+            ok = False
+            tw.write_summary(
+                {
+                    "run_id": tw.run_id,
+                    "scenario_id": sc.scenario_id,
+                    "ok": ok,
+                    "failures": failures,
+                    "duration_ms": int((time.time() - start) * 1000),
+                }
+            )
+            results.append(
+                {
+                    "scenario_id": sc.scenario_id,
+                    "ok": ok,
+                    "failures": failures,
+                    "run_id": tw.run_id,
+                    "run_dir": str(tw.run_dir),
+                }
+            )
+            continue
+
+        client_kwargs: Dict[str, Any] = {}
+        if http_base_url:
+            client_kwargs = {"base_url": http_base_url}
+        else:
+            client_kwargs = {"app": app, "base_url": "http://test"}
+
+        async with httpx.AsyncClient(**client_kwargs) as client:
             for turn_idx in range(max_turns):
                 tw.write_event({"type": "turn_user", "turn_idx": turn_idx, "text": redact_for_trace(user_msg)})
 
