@@ -24,6 +24,11 @@ final class AppStore: ObservableObject {
         return classroomAssignments.first(where: { $0.id == id })?.description
     }
 
+    func assignmentCourseName(forSourceAssignmentId id: String?) -> String? {
+        guard let id, !id.isEmpty else { return nil }
+        return classroomAssignments.first(where: { $0.id == id })?.courseName
+    }
+
     private var api: APIClient { APIClient(baseURLString: baseURL) }
 
     func resetConversation() async {
