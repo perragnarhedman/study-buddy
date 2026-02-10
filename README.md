@@ -37,6 +37,9 @@ Backend runs at `http://127.0.0.1:8000` by default.
   - **Base URL** (default `http://127.0.0.1:8000`)
   - **Use Stub Data** (fallback when offline / backend not running)
 
+Dev notes:
+- `docs/IOS_SIMULATOR_SWEDISH_KEYBOARD.md` (type å/ä/ö in the iOS Simulator)
+
 ### Tests
 
 ```bash
