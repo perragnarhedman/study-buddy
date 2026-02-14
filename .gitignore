@@ -24,6 +24,7 @@ DerivedData/
 *.swiftpm/
 .build/
 xcuserdata/
+xcshareddata/
 
 ## Local DB
 *.sqlite3
