@@ -1,17 +1,21 @@
 import json
 import time
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import ValidationError
 
 from app.models.schemas import (
+    AssignmentCard,
     ChatMessage,
     ChatSendRequest,
     ChatSendResponse,
+    SetAssignmentStatusRequest,
+    SetAssignmentStatusResponse,
     iso_now,
     new_id,
+    week_start_iso,
 )
 from app.core.auth import AuthContext, require_user_id
 from app.core.db import (
@@ -32,6 +36,78 @@ from app.services.assignment_source import select_assignments
 from app.services.debug_export import export_chat_trace
 
 router = APIRouter()
+
+def _is_overview_request(text: str) -> bool:
+    """
+    Detect when the user is asking for an overview/list of assignments.
+    This is intentionally heuristic and deterministic (no LLM dependency).
+    """
+    t = (text or "").strip().lower()
+    if not t:
+        return False
+    # English
+    if any(k in t for k in ["what do i have", "what else", "what's coming", "whats coming", "overview", "upcoming"]):
+        return True
+    if "assignments" in t or "homework" in t:
+        return True
+    if "this week" in t or "next week" in t:
+        return True
+    # Swedish
+    if any(k in t for k in ["vad har jag", "vad mer", "översikt", "oversikt", "kommande", "uppgifter", "läxor", "laxor"]):
+        return True
+    if "den här veckan" in t or "denna vecka" in t or "nästa vecka" in t or "nasta vecka" in t:
+        return True
+    return False
+
+
+def _overview_bucket(text: str) -> str:
+    t = (text or "").strip().lower()
+    if any(k in t for k in ["next week", "nästa vecka", "nasta vecka"]):
+        return "next_week"
+    if any(k in t for k in ["this week", "den här veckan", "denna vecka"]):
+        return "this_week"
+    return "all"
+
+
+def _parse_date_loose(raw: Optional[str]) -> Optional[date]:
+    if not isinstance(raw, str) or not raw.strip():
+        return None
+    s = raw.strip()
+    # 1) YYYY-MM-DD
+    try:
+        if len(s) >= 10 and s[4] == "-" and s[7] == "-":
+            return date.fromisoformat(s[:10])
+    except Exception:
+        pass
+    # 2) ISO8601 datetime
+    try:
+        dt = datetime.fromisoformat(s.replace("Z", "+00:00"))
+        return dt.date()
+    except Exception:
+        return None
+
+
+def _bucket_plan_items_for_cards(*, plan_items: list, week_start_raw: str) -> dict[str, list]:
+    """
+    Buckets plan items into this_week / next_week / later for card display.
+    Missing/invalid due dates fall into later.
+    """
+    ws = _parse_date_loose(week_start_raw) or date.fromisoformat(week_start_iso())
+    start_next = ws.fromordinal(ws.toordinal() + 7)
+    start_after_next = ws.fromordinal(ws.toordinal() + 14)
+
+    out = {"this_week": [], "next_week": [], "later": []}
+    for it in plan_items:
+        d = _parse_date_loose(getattr(it, "dueDate", None))
+        if d is None:
+            out["later"].append(it)
+        elif d < start_next:
+            out["this_week"].append(it)
+        elif d < start_after_next:
+            out["next_week"].append(it)
+        else:
+            out["later"].append(it)
+    return out
 
 def _sanitize_user_only_summary(summary: str) -> str:
     """
@@ -415,6 +491,46 @@ async def chat_send(
 
     assistant_message = ChatMessage(id=new_id(), role="assistant", text=text, timestamp=iso_now())
 
+    # Optional: attach assignment cards for overview-style user questions.
+    assignment_cards: Optional[list[AssignmentCard]] = None
+    if _is_overview_request(user_text):
+        bucket = _overview_bucket(user_text)
+        buckets = _bucket_plan_items_for_cards(
+            plan_items=plan_items, week_start_raw=str(payload.current_plan.weekStart)
+        )
+
+        if bucket == "this_week":
+            chosen = buckets["this_week"]
+        elif bucket == "next_week":
+            chosen = buckets["next_week"]
+        else:
+            chosen = buckets["this_week"] + buckets["next_week"] + buckets["later"]
+
+        cards: list[AssignmentCard] = []
+        for it in chosen:
+            # Skip done items for overview cards by default.
+            if getattr(it, "status", None) == "done":
+                continue
+            sid = getattr(it, "sourceAssignmentId", None)
+            a = assignments_by_id.get(str(sid)) if isinstance(sid, str) else None
+
+            cards.append(
+                AssignmentCard(
+                    id=str(sid) if isinstance(sid, str) and sid else it.id,
+                    title=str(it.title),
+                    courseName=(a.courseName if a else None),
+                    dueDate=getattr(it, "dueDate", None),
+                    estimatedMinutes=getattr(it, "estimatedMinutes", None),
+                    status=getattr(it, "status", "todo"),
+                    sourceAssignmentId=sid,
+                    url=(a.url if a else None),
+                    attachments=(a.attachments if a and a.attachments is not None else getattr(it, "attachments", None)),
+                )
+            )
+            if len(cards) >= 10:
+                break
+        assignment_cards = cards
+
     # Debug export (best-effort).
     try:
         for a in attempts:
@@ -437,6 +553,7 @@ async def chat_send(
                 "response": {
                     "assistant_text": text,
                     "best_next_action_id": best_next_action.id if best_next_action else None,
+                    "assignment_cards_count": len(assignment_cards or []),
                 },
             },
         )
@@ -446,6 +563,7 @@ async def chat_send(
     return ChatSendResponse(
         assistant_message=assistant_message,
         best_next_action=best_next_action,
+        assignment_cards=assignment_cards,
     )
 
 
@@ -466,5 +584,22 @@ async def chat_reset(
         clear_preferences=clear_preferences,
     )
     return {"status": "ok"}
+
+
+@router.post("/assignment/status", response_model=SetAssignmentStatusResponse)
+async def assignment_status_set(
+    payload: SetAssignmentStatusRequest,
+    ctx: AuthContext = Depends(require_user_id),
+) -> SetAssignmentStatusResponse:
+    """
+    Persist assignment status updates triggered by the client UI (e.g., tapping a chat card).
+    """
+    set_assignment_status(
+        user_id=ctx.user_id,
+        source_assignment_id=payload.sourceAssignmentId,
+        status=payload.status,
+        updated_at=int(time.time()),
+    )
+    return SetAssignmentStatusResponse(status="ok")
 
 

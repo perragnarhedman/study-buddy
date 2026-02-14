@@ -46,7 +46,13 @@ struct ChatView: View {
             ScrollView {
                 LazyVStack(spacing: 10) {
                     ForEach(store.messages) { msg in
-                        MessageRow(message: msg)
+                        MessageRow(
+                            message: msg,
+                            cards: store.assignmentCards(forAssistantMessageId: msg.id),
+                            onMarkDone: { sid in
+                                Task { await store.markDoneFromCard(sourceAssignmentId: sid) }
+                            }
+                        )
                             .id(msg.id)
                     }
                 }
@@ -94,6 +100,8 @@ struct ChatView: View {
 
 private struct MessageRow: View {
     let message: ChatMessage
+    let cards: [AssignmentCard]
+    let onMarkDone: (String) -> Void
 
     var isUser: Bool { message.role == .user }
 
@@ -110,12 +118,97 @@ private struct MessageRow: View {
                     .background(isUser ? Color.accentColor : Color(.secondarySystemBackground))
                     .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
 
+                if !isUser, !cards.isEmpty {
+                    VStack(alignment: .leading, spacing: 8) {
+                        ForEach(cards.prefix(6)) { c in
+                            AssignmentCardRow(card: c, onMarkDone: onMarkDone)
+                        }
+                    }
+                    .padding(.top, 4)
+                }
+
                 Text(message.role == .assistant ? "Coach" : "You")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
             }
 
             if !isUser { Spacer(minLength: 40) }
+        }
+    }
+}
+
+private struct AssignmentCardRow: View {
+    let card: AssignmentCard
+    let onMarkDone: (String) -> Void
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            Circle()
+                .fill(dotColor)
+                .frame(width: 10, height: 10)
+                .padding(.top, 6)
+
+            VStack(alignment: .leading, spacing: 4) {
+                if let course = card.courseName, !course.isEmpty {
+                    Text(course)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Text(card.title)
+                    .font(.subheadline)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(.primary)
+                    .lineLimit(2)
+
+                HStack(spacing: 10) {
+                    if let mins = card.estimatedMinutes {
+                        Label("\(mins) min", systemImage: "clock")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    if let dueText = DueDateDisplay.format(card.dueDate) {
+                        Label(dueText, systemImage: "calendar")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
+                if let attachments = card.attachments, !attachments.isEmpty {
+                    VStack(alignment: .leading, spacing: 4) {
+                        ForEach(attachments.prefix(2), id: \.url) { a in
+                            if let u = URL(string: a.url) {
+                                Link(a.title, destination: u)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                }
+            }
+
+            Spacer(minLength: 0)
+
+            if card.status != .done {
+                Button("Done") {
+                    let sid = (card.sourceAssignmentId ?? card.id)
+                    if !sid.isEmpty {
+                        onMarkDone(sid)
+                    }
+                }
+                .font(.caption.weight(.semibold))
+                .buttonStyle(.bordered)
+            }
+        }
+        .padding(12)
+        .background(Color(.secondarySystemBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+    }
+
+    private var dotColor: Color {
+        switch card.status {
+        case .todo: return .orange
+        case .doing: return .blue
+        case .done: return .green
         }
     }
 }

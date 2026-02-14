@@ -40,6 +40,18 @@ struct WeeklyPlan: Codable, Equatable {
     let items: [PlanItem]
 }
 
+struct AssignmentCard: Identifiable, Codable, Equatable {
+    let id: String
+    let title: String
+    let courseName: String?
+    let dueDate: String?
+    let estimatedMinutes: Int?
+    let status: PlanItem.Status
+    let sourceAssignmentId: String?
+    let url: String?
+    let attachments: [AttachmentLink]?
+}
+
 struct ChatSendRequest: Codable {
     let userMessage: String
     let currentPlan: WeeklyPlan?
@@ -53,11 +65,18 @@ struct ChatSendRequest: Codable {
 struct ChatSendResponse: Codable {
     let assistantMessage: ChatMessage
     let bestNextAction: PlanItem?
+    let assignmentCards: [AssignmentCard]?
 
     enum CodingKeys: String, CodingKey {
         case assistantMessage = "assistant_message"
         case bestNextAction = "best_next_action"
+        case assignmentCards = "assignment_cards"
     }
+}
+
+struct SetAssignmentStatusRequest: Codable {
+    let sourceAssignmentId: String
+    let status: PlanItem.Status
 }
 
 struct Assignment: Codable, Equatable {

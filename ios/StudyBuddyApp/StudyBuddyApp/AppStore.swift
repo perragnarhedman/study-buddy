@@ -7,6 +7,8 @@ final class AppStore: ObservableObject {
     @AppStorage("baseURL") var baseURL: String = "http://127.0.0.1:8000"
 
     @Published var messages: [ChatMessage] = []
+    // Cards associated with a specific assistant message id (rendered inline in Chat).
+    @Published var assignmentCardsByAssistantMessageId: [String: [AssignmentCard]] = [:]
     @Published var weeklyPlan: WeeklyPlan? = nil
     @Published var bestNextActionFromChat: PlanItem? = nil
     @Published var classroomAssignmentsImported: Int? = nil
@@ -152,6 +154,11 @@ final class AppStore: ObservableObject {
             let resp = Self.stubChatResponse(for: trimmed, currentPlan: weeklyPlan)
             updateMessageText(id: assistantId, newText: resp.assistantMessage.text)
             bestNextActionFromChat = resp.bestNextAction
+            if let cards = resp.assignmentCards, !cards.isEmpty {
+                assignmentCardsByAssistantMessageId[assistantId] = cards
+            } else {
+                assignmentCardsByAssistantMessageId.removeValue(forKey: assistantId)
+            }
             chatErrorMessage = nil
             if weeklyPlan == nil { weeklyPlan = Self.stubWeeklyPlan() }
             return
@@ -173,6 +180,11 @@ final class AppStore: ObservableObject {
             let resp = try await api.sendChat(userMessage: trimmed, currentPlan: currentPlan, sessionToken: sessionToken)
             updateMessageText(id: assistantId, newText: resp.assistantMessage.text)
             bestNextActionFromChat = resp.bestNextAction
+            if let cards = resp.assignmentCards, !cards.isEmpty {
+                assignmentCardsByAssistantMessageId[assistantId] = cards
+            } else {
+                assignmentCardsByAssistantMessageId.removeValue(forKey: assistantId)
+            }
             chatErrorMessage = nil
             authErrorMessage = nil
 
@@ -180,6 +192,7 @@ final class AppStore: ObservableObject {
             await loadWeeklyPlan(preserveChatAction: true)
         } catch {
             bestNextActionFromChat = nil
+            assignmentCardsByAssistantMessageId.removeValue(forKey: assistantId)
             if let apiError = error as? APIError, case .serviceUnavailable = apiError {
                 chatErrorMessage = "Coach service unavailable (OpenAI)."
                 updateMessageText(id: assistantId, newText: "Coach service unavailable right now (OpenAI).")
@@ -199,6 +212,59 @@ final class AppStore: ObservableObject {
                 chatErrorMessage = "Could not reach backend."
                 updateMessageText(id: assistantId, newText: "Could not reach backend.")
             }
+        }
+    }
+
+    func assignmentCards(forAssistantMessageId id: String) -> [AssignmentCard] {
+        assignmentCardsByAssistantMessageId[id] ?? []
+    }
+
+    func markDoneFromCard(sourceAssignmentId: String) async {
+        // Optimistic local update (both plan and currently displayed cards).
+        if let plan = weeklyPlan {
+            let updated = plan.items.map { it -> PlanItem in
+                guard it.sourceAssignmentId == sourceAssignmentId else { return it }
+                return PlanItem(
+                    id: it.id,
+                    title: it.title,
+                    dueDate: it.dueDate,
+                    estimatedMinutes: it.estimatedMinutes,
+                    status: .done,
+                    sourceAssignmentId: it.sourceAssignmentId,
+                    attachments: it.attachments
+                )
+            }
+            weeklyPlan = WeeklyPlan(weekStart: plan.weekStart, items: updated)
+        }
+        assignmentCardsByAssistantMessageId = assignmentCardsByAssistantMessageId.mapValues { cards in
+            cards.map { c in
+                guard c.sourceAssignmentId == sourceAssignmentId || c.id == sourceAssignmentId else { return c }
+                return AssignmentCard(
+                    id: c.id,
+                    title: c.title,
+                    courseName: c.courseName,
+                    dueDate: c.dueDate,
+                    estimatedMinutes: c.estimatedMinutes,
+                    status: .done,
+                    sourceAssignmentId: c.sourceAssignmentId,
+                    url: c.url,
+                    attachments: c.attachments
+                )
+            }
+        }
+
+        guard !useStubData else { return }
+        do {
+            try await api.setAssignmentStatus(
+                sessionToken: sessionToken,
+                sourceAssignmentId: sourceAssignmentId,
+                status: .done
+            )
+            // Refresh plan so Plan/Chat stay consistent with persisted state.
+            await loadWeeklyPlan(preserveChatAction: true)
+        } catch {
+            // If this fails, just refresh from server to reconcile.
+            await loadWeeklyPlan(preserveChatAction: true)
         }
     }
 
@@ -258,7 +324,25 @@ final class AppStore: ObservableObject {
             timestamp: isoNow()
         )
         let best = currentPlan?.items.first(where: { $0.status == .todo }) ?? stubWeeklyPlan().items.first
-        return ChatSendResponse(assistantMessage: assistant, bestNextAction: best)
+        let lower = userText.lowercased()
+        let wantsOverview = lower.contains("this week") || lower.contains("assignments") || lower.contains("uppgifter") || lower.contains("denna vecka")
+        let cards: [AssignmentCard]? = wantsOverview
+            ? (currentPlan?.items.prefix(5).map { it in
+                AssignmentCard(
+                    id: it.sourceAssignmentId ?? it.id,
+                    title: it.title,
+                    courseName: nil,
+                    dueDate: it.dueDate,
+                    estimatedMinutes: it.estimatedMinutes,
+                    status: it.status,
+                    sourceAssignmentId: it.sourceAssignmentId,
+                    url: nil,
+                    attachments: nil
+                )
+            } ?? [])
+            : nil
+
+        return ChatSendResponse(assistantMessage: assistant, bestNextAction: best, assignmentCards: cards)
     }
 
     static func isoNow() -> String {

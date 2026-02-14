@@ -43,6 +43,23 @@ class PlanItem(BaseModel):
     attachments: Optional[List[AttachmentLink]] = None
 
 
+class AssignmentCard(BaseModel):
+    """
+    UI-friendly representation of an assignment/task to display inline in Chat.
+    Similar to Plan items, but can carry extra display fields like courseName/url.
+    """
+
+    id: str
+    title: str
+    courseName: Optional[str] = None
+    dueDate: Optional[str] = None  # ISO8601
+    estimatedMinutes: Optional[int] = None
+    status: PlanStatus
+    sourceAssignmentId: Optional[str] = None
+    url: Optional[str] = None
+    attachments: Optional[List[AttachmentLink]] = None
+
+
 class WeeklyPlan(BaseModel):
     weekStart: str  # ISO8601 date (YYYY-MM-DD)
     items: List[PlanItem]
@@ -56,6 +73,16 @@ class ChatSendRequest(BaseModel):
 class ChatSendResponse(BaseModel):
     assistant_message: ChatMessage
     best_next_action: Optional[PlanItem] = None
+    assignment_cards: Optional[List[AssignmentCard]] = None
+
+
+class SetAssignmentStatusRequest(BaseModel):
+    sourceAssignmentId: str = Field(..., min_length=1)
+    status: PlanStatus
+
+
+class SetAssignmentStatusResponse(BaseModel):
+    status: Literal["ok"]
 
 
 def iso_now() -> str:
