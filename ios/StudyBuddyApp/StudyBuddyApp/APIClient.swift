@@ -72,8 +72,22 @@ final class APIClient {
         return decoded
     }
 
-    func resetConversation(sessionToken: String?) async throws {
-        let u = try url("chat/reset")
+    func resetConversation(
+        sessionToken: String?,
+        clearAssignmentStatus: Bool = false,
+        clearPreferences: Bool = false
+    ) async throws {
+        var u = try url("chat/reset")
+        var q: [URLQueryItem] = []
+        if clearAssignmentStatus {
+            q.append(URLQueryItem(name: "clear_assignment_status", value: "true"))
+        }
+        if clearPreferences {
+            q.append(URLQueryItem(name: "clear_preferences", value: "true"))
+        }
+        if !q.isEmpty {
+            u = u.appending(queryItems: q)
+        }
         var req = URLRequest(url: u)
         req.httpMethod = "POST"
         if let token = sessionToken, !token.isEmpty {

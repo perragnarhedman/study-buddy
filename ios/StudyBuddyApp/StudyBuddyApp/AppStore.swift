@@ -36,6 +36,7 @@ final class AppStore: ObservableObject {
     func resetConversation() async {
         guard !useStubData else {
             messages = []
+            assignmentCardsByAssistantMessageId = [:]
             bestNextActionFromChat = nil
             chatErrorMessage = nil
             chatInfoMessage = "Conversation reset."
@@ -44,6 +45,7 @@ final class AppStore: ObservableObject {
         do {
             try await api.resetConversation(sessionToken: sessionToken)
             messages = []
+            assignmentCardsByAssistantMessageId = [:]
             bestNextActionFromChat = nil
             chatErrorMessage = nil
             chatInfoMessage = "Conversation reset."
@@ -53,6 +55,37 @@ final class AppStore: ObservableObject {
                 chatErrorMessage = "Please sign in (Settings → Connect Google Classroom)."
             } else {
                 chatErrorMessage = "Could not reset conversation. Check backend is running."
+            }
+        }
+    }
+
+    func resetMyAssignmentStatuses() async {
+        guard !useStubData else {
+            // No persisted status in stub mode; just refresh stub plan.
+            weeklyPlan = Self.stubWeeklyPlan()
+            bestNextActionFromChat = nil
+            assignmentCardsByAssistantMessageId = [:]
+            messages = []
+            chatErrorMessage = nil
+            chatInfoMessage = "Reset: assignment statuses cleared."
+            return
+        }
+        do {
+            try await api.resetConversation(sessionToken: sessionToken, clearAssignmentStatus: true)
+            // Endpoint resets conversation state as well, so mirror that locally.
+            messages = []
+            assignmentCardsByAssistantMessageId = [:]
+            bestNextActionFromChat = nil
+            chatErrorMessage = nil
+            chatInfoMessage = "Reset: assignment statuses cleared."
+            // Refresh plan so statuses show up as Todo again.
+            await loadWeeklyPlan(preserveChatAction: true)
+        } catch {
+            if let apiError = error as? APIError, case .unauthorized = apiError {
+                authErrorMessage = "Please sign in to use Study Buddy."
+                chatErrorMessage = "Please sign in (Settings → Connect Google Classroom)."
+            } else {
+                chatErrorMessage = "Could not reset assignment statuses. Check backend is running."
             }
         }
     }
