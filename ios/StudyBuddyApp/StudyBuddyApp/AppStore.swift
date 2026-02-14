@@ -80,6 +80,16 @@ final class AppStore: ObservableObject {
             chatInfoMessage = "Reset: assignment statuses cleared."
             // Refresh plan so statuses show up as Todo again.
             await loadWeeklyPlan(preserveChatAction: true)
+
+            // Fallback: if the backend didn't actually clear persisted done/doing state (stale deploy),
+            // explicitly set all current plan items back to todo.
+            if let plan = weeklyPlan, plan.items.contains(where: { $0.status == .done || $0.status == .doing }) {
+                let ids = Array(Set(plan.items.compactMap { $0.sourceAssignmentId }.filter { !$0.isEmpty }))
+                for sid in ids.prefix(20) {
+                    try? await api.setAssignmentStatus(sessionToken: sessionToken, sourceAssignmentId: sid, status: .todo)
+                }
+                await loadWeeklyPlan(preserveChatAction: true)
+            }
         } catch {
             if let apiError = error as? APIError, case .unauthorized = apiError {
                 authErrorMessage = "Please sign in to use Study Buddy."
