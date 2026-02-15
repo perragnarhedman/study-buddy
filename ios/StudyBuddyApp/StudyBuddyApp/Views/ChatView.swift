@@ -220,8 +220,8 @@ private struct MessageRow: View {
 
     private func extractSubjectHint(from paragraph: String) -> String? {
         // Match patterns like:
-        // "1. Engelska: ...", "2. Historia: ..."
-        let pattern = #"^\s*\d+\.\s*([^\:\n]{2,40})\:"#
+        // "1. Engelska: ...", "2. Historia: ...", "Historia: ...", "Engelska: ..."
+        let pattern = #"^\s*(?:\d+\.\s*)?([^\:\n]{2,40})\s*:"#
         guard let re = try? NSRegularExpression(pattern: pattern, options: []) else { return nil }
         let range = NSRange(paragraph.startIndex..<paragraph.endIndex, in: paragraph)
         guard let m = re.firstMatch(in: paragraph, options: [], range: range) else { return nil }
@@ -232,12 +232,33 @@ private struct MessageRow: View {
 
     private func matchCards(subjectHint: String, from cards: inout [AssignmentCard]) -> [AssignmentCard] {
         let hint = subjectHint.lowercased()
+        // Lightweight Swedish↔English subject normalization for matching.
+        let hintAlt: String? = {
+            let m: [String: String] = [
+                "historia": "history",
+                "engelska": "english",
+                "svenska": "swedish",
+                "matte": "math",
+                "matematik": "math",
+                "biologi": "biology",
+                "kemi": "chemistry",
+                "fysik": "physics",
+                "geografi": "geography",
+            ]
+            return m[hint]
+        }()
+
         var matched: [AssignmentCard] = []
         var remaining: [AssignmentCard] = []
         for c in cards {
             let course = (c.courseName ?? "").lowercased()
             let title = c.title.lowercased()
-            if (!course.isEmpty && course.contains(hint)) || title.contains(hint) {
+            let okDirect = (!course.isEmpty && course.contains(hint)) || title.contains(hint)
+            let okAlt = {
+                guard let hintAlt else { return false }
+                return (!course.isEmpty && course.contains(hintAlt)) || title.contains(hintAlt)
+            }()
+            if okDirect || okAlt {
                 matched.append(c)
             } else {
                 remaining.append(c)
