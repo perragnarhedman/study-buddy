@@ -76,6 +76,75 @@ def test_chat_send_overview_includes_assignment_cards(tmp_path, monkeypatch: pyt
     assert any(c.get("courseName") == "English" for c in cards)
 
 
+def test_chat_send_greeting_can_still_include_cards_if_assistant_outputs_overview_list(
+    tmp_path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("SESSION_SECRET", "test-secret")
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    monkeypatch.setenv("SQLITE_PATH", str(tmp_path / "test.db"))
+    get_settings.cache_clear()
+
+    import app.routes.chat as chat_route
+    from app.models.agent import CoachDecision
+    from app.models.schemas import Assignment
+
+    async def fake_select_assignments(_user_id):
+        return (
+            [
+                Assignment(id="a1", title="Historia", courseName="History", dueDate="2026-01-14"),
+                Assignment(id="a2", title="Engelska", courseName="English", dueDate="2026-01-20"),
+            ],
+            {"source": "fake"},
+        )
+
+    async def fake_coach_decide(**kwargs) -> CoachDecision:
+        return CoachDecision(
+            assistant_text="Hej! Idag har du två uppgifter:\n\n1. Historia: ...\n\n2. Engelska: ...",
+            reply_language="sv",
+            selected_assignment_id=None,
+            mark_done_assignment_id=None,
+        )
+
+    monkeypatch.setattr(chat_route, "select_assignments", fake_select_assignments)
+    monkeypatch.setattr(chat_route, "coach_decide", fake_coach_decide)
+
+    client = TestClient(app)
+    token = issue_session_token("u1")
+    r = client.post(
+        "/chat/send",
+        headers={"Authorization": f"Bearer {token}"},
+        json={
+            "user_message": "Hej!",
+            "current_plan": {
+                "weekStart": "2026-01-13",
+                "items": [
+                    {
+                        "id": "a1-1",
+                        "title": "Start Historia: 30 min",
+                        "dueDate": "2026-01-14",
+                        "estimatedMinutes": 30,
+                        "status": "todo",
+                        "sourceAssignmentId": "a1",
+                    },
+                    {
+                        "id": "a2-1",
+                        "title": "Start Engelska: 20 min",
+                        "dueDate": "2026-01-20",
+                        "estimatedMinutes": 20,
+                        "status": "todo",
+                        "sourceAssignmentId": "a2",
+                    },
+                ],
+            },
+        },
+    )
+    assert r.status_code == 200
+    obj = r.json()
+    cards = obj.get("assignment_cards") or []
+    assert isinstance(cards, list)
+    assert len(cards) >= 1
+
+
 def test_assignment_status_endpoint_persists(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("SESSION_SECRET", "test-secret")
     monkeypatch.setenv("OPENAI_API_KEY", "test-key")

@@ -69,6 +69,24 @@ def _overview_bucket(text: str) -> str:
     return "all"
 
 
+def _assistant_text_looks_like_overview(text: str) -> bool:
+    """
+    If the coach writes an overview list (often numbered), we attach assignment_cards even if the
+    user didn't explicitly ask for them (e.g. user says "Hej!" and coach responds with a list).
+    """
+    if not isinstance(text, str) or not text.strip():
+        return False
+    t = text.strip()
+    # Common pattern: numbered list items.
+    if "\n1." in t or t.startswith("1."):
+        return True
+    # Swedish/English overview phrases.
+    tl = t.lower()
+    if any(k in tl for k in ["idag har du", "här är", "here's what you have", "here is what you have"]):
+        return True
+    return False
+
+
 def _parse_date_loose(raw: Optional[str]) -> Optional[date]:
     if not isinstance(raw, str) or not raw.strip():
         return None
@@ -493,7 +511,7 @@ async def chat_send(
 
     # Optional: attach assignment cards for overview-style user questions.
     assignment_cards: Optional[list[AssignmentCard]] = None
-    if _is_overview_request(user_text):
+    if _is_overview_request(user_text) or _assistant_text_looks_like_overview(text):
         bucket = _overview_bucket(user_text)
         buckets = _bucket_plan_items_for_cards(
             plan_items=plan_items, week_start_raw=str(payload.current_plan.weekStart)
