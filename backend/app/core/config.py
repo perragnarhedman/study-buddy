@@ -23,11 +23,15 @@ class Settings(BaseSettings):
     google_redirect_uri: str = ""
     session_secret: str = ""
     sqlite_path: str = "backend.sqlite3"
+    sqlite_timeout_seconds: float = 10.0
+    sqlite_wal_enabled: bool = True
     openai_api_key: str = ""
-    openai_model: str = "gpt-4.1-mini"
+    openai_chat_model: str = "gpt-5.2"
+    openai_plan_model: str = "gpt-5-mini"
+    openai_chat_timeout_seconds: float = 20.0
     # Planning calls can take longer than coaching decisions; keep a generous default.
-    openai_timeout_seconds: float = 30.0
-    openai_required: bool = True
+    openai_plan_timeout_seconds: float = 30.0
+    prompts_hot_reload: bool = True
 
     # Debug export (chat trace + prompts)
     debug_export_enabled: bool = False

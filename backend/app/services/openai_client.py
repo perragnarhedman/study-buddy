@@ -17,16 +17,48 @@ _JSON_OBJ_RE = re.compile(r"\{[\s\S]*\}")
 def _parse_json_object_relaxed(text: str) -> dict:
     """
     Best-effort parse of a JSON object from model output.
-    Accepts code fences or extra surrounding text by extracting the outermost {...}.
+    Accepts extra surrounding text and code fences, but requires a single
+    decodable JSON object.
     """
     text = text.strip()
-    # Strip common code fences.
     if text.startswith("```"):
-        text = text.strip("`")
-    m = _JSON_OBJ_RE.search(text)
-    if not m:
-        raise ValueError("no_json_object_found")
-    return json.loads(m.group(0))
+        text = re.sub(r"^```[a-zA-Z0-9_-]*\n?", "", text)
+        text = re.sub(r"\n?```$", "", text).strip()
+    decoder = json.JSONDecoder()
+    for m in _JSON_OBJ_RE.finditer(text):
+        cand = m.group(0).strip()
+        try:
+            obj, idx = decoder.raw_decode(cand)
+        except json.JSONDecodeError:
+            continue
+        if cand[idx:].strip():
+            continue
+        if isinstance(obj, dict):
+            return obj
+    raise ValueError("no_json_object_found")
+
+
+def _extract_output_texts(data: dict) -> list[str]:
+    output = data.get("output", [])
+    texts: list[str] = []
+    for item in output:
+        for c in item.get("content", []) or []:
+            if c.get("type") == "output_text" and isinstance(c.get("text"), str):
+                texts.append(c["text"])
+    return texts
+
+
+async def _responses_text(*, model: str, prompt: str, timeout_seconds: float, api_key: str) -> str:
+    headers = {"Authorization": f"Bearer {api_key}"}
+    payload = {"model": model, "input": prompt}
+    async with httpx.AsyncClient(timeout=timeout_seconds) as client:
+        r = await client.post(f"{OPENAI_BASE_URL}/responses", json=payload, headers=headers)
+        r.raise_for_status()
+        data = r.json()
+    texts = _extract_output_texts(data)
+    if not texts:
+        raise RuntimeError("OpenAI response missing text")
+    return "\n".join(texts).strip()
 
 
 async def plan_week(assignments_json: str, week_start: str) -> str:
@@ -48,31 +80,18 @@ async def plan_week(assignments_json: str, week_start: str) -> str:
     )
     prompt = f"{system_prompt}\n\n{user_prompt}\n"
 
-    headers = {"Authorization": f"Bearer {settings.openai_api_key}"}
-    payload = {"model": settings.openai_model, "input": prompt}
-
-    async with httpx.AsyncClient(timeout=settings.openai_timeout_seconds) as client:
-        r = await client.post(f"{OPENAI_BASE_URL}/responses", json=payload, headers=headers)
-        r.raise_for_status()
-        data = r.json()
-
-    # Responses API: best-effort extraction of text.
-    output = data.get("output", [])
-    texts: list[str] = []
-    for item in output:
-        for c in item.get("content", []) or []:
-            if c.get("type") == "output_text" and isinstance(c.get("text"), str):
-                texts.append(c["text"])
-    if not texts:
-        raise RuntimeError("OpenAI response missing text")
-    return "\n".join(texts).strip()
+    return await _responses_text(
+        model=settings.openai_plan_model,
+        prompt=prompt,
+        timeout_seconds=settings.openai_plan_timeout_seconds,
+        api_key=settings.openai_api_key,
+    )
 
 
 async def coach_decide(
     *,
     user_message: str,
     plan_items_json: str,
-    assignment_instructions: str,
     conversation_history: str = "",
     conversation_summary: str = "",
     user_state_json: str = "",
@@ -80,7 +99,6 @@ async def coach_decide(
     decision, _raw = await coach_decide_with_raw(
         user_message=user_message,
         plan_items_json=plan_items_json,
-        assignment_instructions=assignment_instructions,
         conversation_history=conversation_history,
         conversation_summary=conversation_summary,
         user_state_json=user_state_json,
@@ -92,7 +110,6 @@ async def coach_decide_with_raw(
     *,
     user_message: str,
     plan_items_json: str,
-    assignment_instructions: str,
     conversation_history: str = "",
     conversation_summary: str = "",
     user_state_json: str = "",
@@ -112,7 +129,6 @@ async def coach_decide_with_raw(
         {
             "user_message": user_message,
             "plan_items_json": plan_items_json,
-            "assignment_instructions": assignment_instructions,
             "conversation_history": conversation_history,
             "conversation_summary": conversation_summary,
             "user_state_json": user_state_json,
@@ -120,24 +136,12 @@ async def coach_decide_with_raw(
     )
     prompt = f"{system_prompt}\n\n{user_prompt}\n"
 
-    headers = {"Authorization": f"Bearer {settings.openai_api_key}"}
-    payload = {"model": settings.openai_model, "input": prompt}
-
-    async with httpx.AsyncClient(timeout=settings.openai_timeout_seconds) as client:
-        r = await client.post(f"{OPENAI_BASE_URL}/responses", json=payload, headers=headers)
-        r.raise_for_status()
-        data = r.json()
-
-    output = data.get("output", [])
-    texts: list[str] = []
-    for item in output:
-        for c in item.get("content", []) or []:
-            if c.get("type") == "output_text" and isinstance(c.get("text"), str):
-                texts.append(c["text"])
-    if not texts:
-        raise RuntimeError("OpenAI response missing text")
-
-    raw = "\n".join(texts).strip()
+    raw = await _responses_text(
+        model=settings.openai_chat_model,
+        prompt=prompt,
+        timeout_seconds=settings.openai_chat_timeout_seconds,
+        api_key=settings.openai_api_key,
+    )
     obj = _parse_json_object_relaxed(raw)
     return CoachDecision.model_validate(obj), raw
 
@@ -146,7 +150,6 @@ def build_coach_prompt(
     *,
     user_message: str,
     plan_items_json: str,
-    assignment_instructions: str,
     conversation_history: str = "",
     conversation_summary: str = "",
     user_state_json: str = "",
@@ -158,7 +161,6 @@ def build_coach_prompt(
         {
             "user_message": user_message,
             "plan_items_json": plan_items_json,
-            "assignment_instructions": assignment_instructions,
             "conversation_history": conversation_history,
             "conversation_summary": conversation_summary,
             "user_state_json": user_state_json,

@@ -13,8 +13,12 @@ def get_conn() -> sqlite3.Connection:
     path = Path(settings.sqlite_path)
     existed_before = path.exists()
     path.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(str(path))
+    conn = sqlite3.connect(str(path), timeout=settings.sqlite_timeout_seconds)
     conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA foreign_keys=ON")
+    conn.execute(f"PRAGMA busy_timeout={int(settings.sqlite_timeout_seconds * 1000)}")
+    if settings.sqlite_wal_enabled:
+        conn.execute("PRAGMA journal_mode=WAL")
     _init(conn)
     try:
         # Helpful for Render persistent disk verification.
@@ -25,6 +29,13 @@ def get_conn() -> sqlite3.Connection:
     except Exception:
         logging.getLogger(__name__).info("sqlite_db path=%s existed_before=%s", str(path), existed_before)
     return conn
+
+
+def _close_quietly(conn: sqlite3.Connection) -> None:
+    try:
+        conn.close()
+    except Exception:
+        pass
 
 
 def _init(conn: sqlite3.Connection) -> None:
@@ -82,6 +93,8 @@ def _init(conn: sqlite3.Connection) -> None:
     _ensure_column(conn, "user_state", "last_intent", "TEXT")
     _ensure_column(conn, "user_state", "preferred_subject", "TEXT")
     _ensure_column(conn, "user_state", "conversation_summary", "TEXT")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_chat_history_user_created ON chat_history(user_id, created_at DESC)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_assignment_status_user_updated ON assignment_status(user_id, updated_at DESC)")
     conn.commit()
 
 
@@ -108,73 +121,176 @@ def upsert_tokens(
     id_token: Optional[str],
 ) -> None:
     conn = get_conn()
-    with conn:
-        conn.execute(
-            """
-            INSERT INTO oauth_tokens (user_id, access_token, refresh_token, expires_at, token_type, scope, id_token)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT(user_id) DO UPDATE SET
-              access_token=excluded.access_token,
-              refresh_token=COALESCE(excluded.refresh_token, oauth_tokens.refresh_token),
-              expires_at=excluded.expires_at,
-              token_type=excluded.token_type,
-              scope=excluded.scope,
-              id_token=excluded.id_token
-            """,
-            (user_id, access_token, refresh_token, expires_at, token_type, scope, id_token),
-        )
+    try:
+        with conn:
+            conn.execute(
+                """
+                INSERT INTO oauth_tokens (user_id, access_token, refresh_token, expires_at, token_type, scope, id_token)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(user_id) DO UPDATE SET
+                  access_token=excluded.access_token,
+                  refresh_token=COALESCE(excluded.refresh_token, oauth_tokens.refresh_token),
+                  expires_at=excluded.expires_at,
+                  token_type=excluded.token_type,
+                  scope=excluded.scope,
+                  id_token=excluded.id_token
+                """,
+                (user_id, access_token, refresh_token, expires_at, token_type, scope, id_token),
+            )
+    finally:
+        _close_quietly(conn)
 
 
 def get_tokens(user_id: str) -> Optional[dict]:
     conn = get_conn()
-    row = conn.execute("SELECT * FROM oauth_tokens WHERE user_id=?", (user_id,)).fetchone()
-    return dict(row) if row else None
+    try:
+        row = conn.execute("SELECT * FROM oauth_tokens WHERE user_id=?", (user_id,)).fetchone()
+        return dict(row) if row else None
+    finally:
+        _close_quietly(conn)
 
 
 def set_assignment_status(*, user_id: str, source_assignment_id: str, status: str, updated_at: int) -> None:
     conn = get_conn()
-    with conn:
-        conn.execute(
-            """
-            INSERT INTO assignment_status (user_id, source_assignment_id, status, updated_at)
-            VALUES (?, ?, ?, ?)
-            ON CONFLICT(user_id, source_assignment_id) DO UPDATE SET
-              status=excluded.status,
-              updated_at=excluded.updated_at
-            """,
-            (user_id, source_assignment_id, status, updated_at),
-        )
+    try:
+        with conn:
+            conn.execute(
+                """
+                INSERT INTO assignment_status (user_id, source_assignment_id, status, updated_at)
+                VALUES (?, ?, ?, ?)
+                ON CONFLICT(user_id, source_assignment_id) DO UPDATE SET
+                  status=excluded.status,
+                  updated_at=excluded.updated_at
+                WHERE excluded.updated_at >= assignment_status.updated_at
+                """,
+                (user_id, source_assignment_id, status, updated_at),
+            )
+    finally:
+        _close_quietly(conn)
 
 
 def get_assignment_status_map(*, user_id: str) -> dict[str, str]:
     conn = get_conn()
-    rows = conn.execute(
-        "SELECT source_assignment_id, status FROM assignment_status WHERE user_id=?",
-        (user_id,),
-    ).fetchall()
-    return {str(r["source_assignment_id"]): str(r["status"]) for r in rows}
+    try:
+        rows = conn.execute(
+            "SELECT source_assignment_id, status FROM assignment_status WHERE user_id=?",
+            (user_id,),
+        ).fetchall()
+        return {str(r["source_assignment_id"]): str(r["status"]) for r in rows}
+    finally:
+        _close_quietly(conn)
 
 
 def append_chat_history(*, user_id: str, role: str, text: str, created_at: int) -> None:
     conn = get_conn()
-    with conn:
-        conn.execute(
-            "INSERT INTO chat_history (user_id, role, text, created_at) VALUES (?, ?, ?, ?)",
-            (user_id, role, text, created_at),
-        )
-        # Keep last 20 rows per user (simple pruning).
-        conn.execute(
-            """
-            DELETE FROM chat_history
-            WHERE rowid IN (
-              SELECT rowid FROM chat_history
-              WHERE user_id=?
-              ORDER BY created_at DESC
-              LIMIT -1 OFFSET 20
+    try:
+        with conn:
+            conn.execute(
+                "INSERT INTO chat_history (user_id, role, text, created_at) VALUES (?, ?, ?, ?)",
+                (user_id, role, text, created_at),
             )
-            """,
-            (user_id,),
-        )
+            # Keep last 20 rows per user (simple pruning).
+            conn.execute(
+                """
+                DELETE FROM chat_history
+                WHERE rowid IN (
+                  SELECT rowid FROM chat_history
+                  WHERE user_id=?
+                  ORDER BY created_at DESC
+                  LIMIT -1 OFFSET 20
+                )
+                """,
+                (user_id,),
+            )
+    finally:
+        _close_quietly(conn)
+
+
+def persist_chat_turn(
+    *,
+    user_id: str,
+    user_text: str,
+    assistant_text: str,
+    now_ts: int,
+    conversation_summary: Optional[str],
+    language_preference: Optional[str],
+    selected_plan_item_id: Optional[str] = None,
+    selected_assignment_id: Optional[str] = None,
+    mark_done_assignment_id: Optional[str] = None,
+) -> None:
+    """
+    Persist all state mutations from one /chat/send turn in a single transaction.
+    This reduces race-condition risk from interleaved writes across multiple connections.
+    """
+    conn = get_conn()
+    try:
+        with conn:
+            if mark_done_assignment_id:
+                conn.execute(
+                    """
+                    INSERT INTO assignment_status (user_id, source_assignment_id, status, updated_at)
+                    VALUES (?, ?, 'done', ?)
+                    ON CONFLICT(user_id, source_assignment_id) DO UPDATE SET
+                      status='done',
+                      updated_at=excluded.updated_at
+                    WHERE excluded.updated_at >= assignment_status.updated_at
+                    """,
+                    (user_id, mark_done_assignment_id, now_ts),
+                )
+
+            conn.execute(
+                "INSERT INTO chat_history (user_id, role, text, created_at) VALUES (?, 'user', ?, ?)",
+                (user_id, user_text[:1200], now_ts),
+            )
+            conn.execute(
+                "INSERT INTO chat_history (user_id, role, text, created_at) VALUES (?, 'assistant', ?, ?)",
+                (user_id, assistant_text[:1200], now_ts + 1),
+            )
+            conn.execute(
+                """
+                DELETE FROM chat_history
+                WHERE rowid IN (
+                  SELECT rowid FROM chat_history
+                  WHERE user_id=?
+                  ORDER BY created_at DESC
+                  LIMIT -1 OFFSET 20
+                )
+                """,
+                (user_id,),
+            )
+
+            conn.execute(
+                """
+                INSERT INTO user_state (
+                  user_id,
+                  last_selected_plan_item_id,
+                  last_selected_assignment_id,
+                  language_preference,
+                  last_intent,
+                  preferred_subject,
+                  conversation_summary,
+                  updated_at
+                )
+                VALUES (?, ?, ?, ?, NULL, NULL, ?, ?)
+                ON CONFLICT(user_id) DO UPDATE SET
+                  last_selected_plan_item_id=COALESCE(excluded.last_selected_plan_item_id, user_state.last_selected_plan_item_id),
+                  last_selected_assignment_id=COALESCE(excluded.last_selected_assignment_id, user_state.last_selected_assignment_id),
+                  language_preference=COALESCE(excluded.language_preference, user_state.language_preference),
+                  conversation_summary=COALESCE(excluded.conversation_summary, user_state.conversation_summary),
+                  updated_at=excluded.updated_at
+                WHERE excluded.updated_at >= user_state.updated_at
+                """,
+                (
+                    user_id,
+                    selected_plan_item_id,
+                    selected_assignment_id,
+                    language_preference,
+                    conversation_summary,
+                    now_ts,
+                ),
+            )
+    finally:
+        _close_quietly(conn)
 
 
 def reset_conversation_state(
@@ -188,139 +304,162 @@ def reset_conversation_state(
     - Optionally clears language_preference / preferred_subject / last_intent
     """
     conn = get_conn()
-    with conn:
-        conn.execute("DELETE FROM chat_history WHERE user_id=?", (user_id,))
-        if clear_preferences:
-            conn.execute(
-                """
-                INSERT INTO user_state (
-                  user_id,
-                  last_selected_plan_item_id,
-                  last_selected_assignment_id,
-                  language_preference,
-                  last_intent,
-                  preferred_subject,
-                  conversation_summary,
-                  updated_at
+    try:
+        with conn:
+            conn.execute("DELETE FROM chat_history WHERE user_id=?", (user_id,))
+            if clear_preferences:
+                conn.execute(
+                    """
+                    INSERT INTO user_state (
+                      user_id,
+                      last_selected_plan_item_id,
+                      last_selected_assignment_id,
+                      language_preference,
+                      last_intent,
+                      preferred_subject,
+                      conversation_summary,
+                      updated_at
+                    )
+                    VALUES (?, NULL, NULL, NULL, NULL, NULL, NULL, strftime('%s','now'))
+                    ON CONFLICT(user_id) DO UPDATE SET
+                      last_selected_plan_item_id=NULL,
+                      last_selected_assignment_id=NULL,
+                      language_preference=NULL,
+                      last_intent=NULL,
+                      preferred_subject=NULL,
+                      conversation_summary=NULL,
+                      updated_at=strftime('%s','now')
+                    """,
+                    (user_id,),
                 )
-                VALUES (?, NULL, NULL, NULL, NULL, NULL, NULL, strftime('%s','now'))
-                ON CONFLICT(user_id) DO UPDATE SET
-                  last_selected_plan_item_id=NULL,
-                  last_selected_assignment_id=NULL,
-                  language_preference=NULL,
-                  last_intent=NULL,
-                  preferred_subject=NULL,
-                  conversation_summary=NULL,
-                  updated_at=strftime('%s','now')
-                """,
-                (user_id,),
-            )
-        else:
-            conn.execute(
-                """
-                INSERT INTO user_state (user_id, last_selected_plan_item_id, last_selected_assignment_id, conversation_summary, updated_at)
-                VALUES (?, NULL, NULL, NULL, strftime('%s','now'))
-                ON CONFLICT(user_id) DO UPDATE SET
-                  last_selected_plan_item_id=NULL,
-                  last_selected_assignment_id=NULL,
-                  conversation_summary=NULL,
-                  updated_at=strftime('%s','now')
-                """,
-                (user_id,),
-            )
-        if clear_assignment_status:
-            conn.execute("DELETE FROM assignment_status WHERE user_id=?", (user_id,))
+            else:
+                conn.execute(
+                    """
+                    INSERT INTO user_state (user_id, last_selected_plan_item_id, last_selected_assignment_id, conversation_summary, updated_at)
+                    VALUES (?, NULL, NULL, NULL, strftime('%s','now'))
+                    ON CONFLICT(user_id) DO UPDATE SET
+                      last_selected_plan_item_id=NULL,
+                      last_selected_assignment_id=NULL,
+                      conversation_summary=NULL,
+                      updated_at=strftime('%s','now')
+                    """,
+                    (user_id,),
+                )
+            if clear_assignment_status:
+                conn.execute("DELETE FROM assignment_status WHERE user_id=?", (user_id,))
+    finally:
+        _close_quietly(conn)
 
 
 def get_chat_history(*, user_id: str, limit: int = 10) -> list[dict]:
     conn = get_conn()
-    rows = conn.execute(
-        """
-        SELECT role, text, created_at
-        FROM chat_history
-        WHERE user_id=?
-        ORDER BY created_at DESC
-        LIMIT ?
-        """,
-        (user_id, int(limit)),
-    ).fetchall()
-    # We fetch newest-first for correctness (LIMIT), then return oldest→newest for prompt readability.
-    out = [{"role": str(r["role"]), "text": str(r["text"]), "created_at": int(r["created_at"])} for r in rows]
-    out.reverse()
-    return out
+    try:
+        rows = conn.execute(
+            """
+            SELECT role, text, created_at
+            FROM chat_history
+            WHERE user_id=?
+            ORDER BY created_at DESC
+            LIMIT ?
+            """,
+            (user_id, int(limit)),
+        ).fetchall()
+        # We fetch newest-first for correctness (LIMIT), then return oldest→newest for prompt readability.
+        out = [{"role": str(r["role"]), "text": str(r["text"]), "created_at": int(r["created_at"])} for r in rows]
+        out.reverse()
+        return out
+    finally:
+        _close_quietly(conn)
 
 
 def set_last_selected_plan_item_id(*, user_id: str, plan_item_id: str, updated_at: int) -> None:
     conn = get_conn()
-    with conn:
-        conn.execute(
-            """
-            INSERT INTO user_state (user_id, last_selected_plan_item_id, updated_at)
-            VALUES (?, ?, ?)
-            ON CONFLICT(user_id) DO UPDATE SET
-              last_selected_plan_item_id=excluded.last_selected_plan_item_id,
-              updated_at=excluded.updated_at
-            """,
-            (user_id, plan_item_id, updated_at),
-        )
+    try:
+        with conn:
+            conn.execute(
+                """
+                INSERT INTO user_state (user_id, last_selected_plan_item_id, updated_at)
+                VALUES (?, ?, ?)
+                ON CONFLICT(user_id) DO UPDATE SET
+                  last_selected_plan_item_id=excluded.last_selected_plan_item_id,
+                  updated_at=excluded.updated_at
+                WHERE excluded.updated_at >= user_state.updated_at
+                """,
+                (user_id, plan_item_id, updated_at),
+            )
+    finally:
+        _close_quietly(conn)
 
 
 def set_last_selected_assignment_id(*, user_id: str, assignment_id: str, updated_at: int) -> None:
     conn = get_conn()
-    with conn:
-        conn.execute(
-            """
-            INSERT INTO user_state (user_id, last_selected_assignment_id, updated_at)
-            VALUES (?, ?, ?)
-            ON CONFLICT(user_id) DO UPDATE SET
-              last_selected_assignment_id=excluded.last_selected_assignment_id,
-              updated_at=excluded.updated_at
-            """,
-            (user_id, assignment_id, updated_at),
-        )
+    try:
+        with conn:
+            conn.execute(
+                """
+                INSERT INTO user_state (user_id, last_selected_assignment_id, updated_at)
+                VALUES (?, ?, ?)
+                ON CONFLICT(user_id) DO UPDATE SET
+                  last_selected_assignment_id=excluded.last_selected_assignment_id,
+                  updated_at=excluded.updated_at
+                WHERE excluded.updated_at >= user_state.updated_at
+                """,
+                (user_id, assignment_id, updated_at),
+            )
+    finally:
+        _close_quietly(conn)
 
 
 def get_last_selected_assignment_id(*, user_id: str) -> Optional[str]:
     conn = get_conn()
-    row = conn.execute(
-        "SELECT last_selected_assignment_id FROM user_state WHERE user_id=?",
-        (user_id,),
-    ).fetchone()
-    if not row:
-        return None
-    v = row["last_selected_assignment_id"]
-    return str(v) if isinstance(v, str) and v else None
+    try:
+        row = conn.execute(
+            "SELECT last_selected_assignment_id FROM user_state WHERE user_id=?",
+            (user_id,),
+        ).fetchone()
+        if not row:
+            return None
+        v = row["last_selected_assignment_id"]
+        return str(v) if isinstance(v, str) and v else None
+    finally:
+        _close_quietly(conn)
 
 
 def get_last_selected_plan_item_id(*, user_id: str) -> Optional[str]:
     conn = get_conn()
-    row = conn.execute(
-        "SELECT last_selected_plan_item_id FROM user_state WHERE user_id=?",
-        (user_id,),
-    ).fetchone()
-    if not row:
-        return None
-    v = row["last_selected_plan_item_id"]
-    return str(v) if isinstance(v, str) and v else None
+    try:
+        row = conn.execute(
+            "SELECT last_selected_plan_item_id FROM user_state WHERE user_id=?",
+            (user_id,),
+        ).fetchone()
+        if not row:
+            return None
+        v = row["last_selected_plan_item_id"]
+        return str(v) if isinstance(v, str) and v else None
+    finally:
+        _close_quietly(conn)
 
 
 def get_user_state(*, user_id: str) -> dict:
     conn = get_conn()
-    row = conn.execute(
-        "SELECT last_selected_plan_item_id, last_selected_assignment_id, language_preference, last_intent, preferred_subject, conversation_summary FROM user_state WHERE user_id=?",
-        (user_id,),
-    ).fetchone()
-    if not row:
-        return {}
-    out = {
-        "last_selected_plan_item_id": row["last_selected_plan_item_id"],
-        "last_selected_assignment_id": row["last_selected_assignment_id"],
-        "language_preference": row["language_preference"],
-        "last_intent": row["last_intent"],
-        "preferred_subject": row["preferred_subject"],
-        "conversation_summary": row["conversation_summary"],
-    }
-    return {k: v for k, v in out.items() if v is not None and v != ""}
+    try:
+        row = conn.execute(
+            "SELECT last_selected_plan_item_id, last_selected_assignment_id, language_preference, last_intent, preferred_subject, conversation_summary FROM user_state WHERE user_id=?",
+            (user_id,),
+        ).fetchone()
+        if not row:
+            return {}
+        out = {
+            "last_selected_plan_item_id": row["last_selected_plan_item_id"],
+            "last_selected_assignment_id": row["last_selected_assignment_id"],
+            "language_preference": row["language_preference"],
+            "last_intent": row["last_intent"],
+            "preferred_subject": row["preferred_subject"],
+            "conversation_summary": row["conversation_summary"],
+        }
+        return {k: v for k, v in out.items() if v is not None and v != ""}
+    finally:
+        _close_quietly(conn)
 
 
 def upsert_user_state(
@@ -333,19 +472,23 @@ def upsert_user_state(
     updated_at: int,
 ) -> None:
     conn = get_conn()
-    with conn:
-        conn.execute(
-            """
-            INSERT INTO user_state (user_id, last_selected_plan_item_id, language_preference, last_intent, preferred_subject, conversation_summary, updated_at)
-            VALUES (?, NULL, ?, ?, ?, ?, ?)
-            ON CONFLICT(user_id) DO UPDATE SET
-              language_preference=COALESCE(excluded.language_preference, user_state.language_preference),
-              last_intent=COALESCE(excluded.last_intent, user_state.last_intent),
-              preferred_subject=COALESCE(excluded.preferred_subject, user_state.preferred_subject),
-              conversation_summary=COALESCE(excluded.conversation_summary, user_state.conversation_summary),
-              updated_at=excluded.updated_at
-            """,
-            (user_id, language_preference, last_intent, preferred_subject, conversation_summary, updated_at),
-        )
+    try:
+        with conn:
+            conn.execute(
+                """
+                INSERT INTO user_state (user_id, last_selected_plan_item_id, language_preference, last_intent, preferred_subject, conversation_summary, updated_at)
+                VALUES (?, NULL, ?, ?, ?, ?, ?)
+                ON CONFLICT(user_id) DO UPDATE SET
+                  language_preference=COALESCE(excluded.language_preference, user_state.language_preference),
+                  last_intent=COALESCE(excluded.last_intent, user_state.last_intent),
+                  preferred_subject=COALESCE(excluded.preferred_subject, user_state.preferred_subject),
+                  conversation_summary=COALESCE(excluded.conversation_summary, user_state.conversation_summary),
+                  updated_at=excluded.updated_at
+                WHERE excluded.updated_at >= user_state.updated_at
+                """,
+                (user_id, language_preference, last_intent, preferred_subject, conversation_summary, updated_at),
+            )
+    finally:
+        _close_quietly(conn)
 
 

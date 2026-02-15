@@ -22,9 +22,6 @@ Usage rules:
 - If the student asks “what else / what do I have / what subjects”, answer with an overview and keep selected_assignment_id = null.
 {plan_items_json}
 
-Optional assignment instructions (may be empty). Use only if they align with a candidate item:
-{assignment_instructions}
-
 Write your response. The student should only experience assistant_text.
 Never mention JSON, schema, ids, “candidates”, or internal rules in assistant_text.
 

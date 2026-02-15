@@ -58,12 +58,10 @@ async def run_coach_openai(
     conversation_history: str,
     conversation_summary: str,
     user_state_json: str,
-    assignment_instructions: str = "",
 ) -> SUTOutput:
     prompt = build_coach_prompt(
         user_message=user_message,
         plan_items_json=json.dumps(candidates, ensure_ascii=False),
-        assignment_instructions=assignment_instructions,
         conversation_history=conversation_history,
         conversation_summary=conversation_summary,
         user_state_json=user_state_json,
@@ -71,7 +69,6 @@ async def run_coach_openai(
     decision, raw = await coach_decide_with_raw(
         user_message=user_message,
         plan_items_json=json.dumps(candidates, ensure_ascii=False),
-        assignment_instructions=assignment_instructions,
         conversation_history=conversation_history,
         conversation_summary=conversation_summary,
         user_state_json=user_state_json,

@@ -60,11 +60,37 @@ struct ChatView: View {
                 .padding(.horizontal, 12)
             }
             .onChange(of: store.messages.count) {
-                guard let last = store.messages.last else { return }
-                withAnimation(.easeOut(duration: 0.2)) {
-                    proxy.scrollTo(last.id, anchor: .bottom)
-                }
+                scrollToLatest(proxy: proxy, animated: true)
             }
+            .onChange(of: store.messages.last?.id) {
+                scrollToLatest(proxy: proxy, animated: true)
+            }
+            .onChange(of: store.messages.last?.text) {
+                // Important: assistant replies often replace "Thinking…" in-place, so
+                // message count does not change. Keep newest content readable.
+                scrollToLatest(proxy: proxy, animated: true)
+            }
+            .onChange(of: latestCardsSignature) {
+                // Cards can render after message text; nudge scroll again so they are visible.
+                scrollToLatest(proxy: proxy, animated: true)
+            }
+        }
+    }
+
+    private var latestCardsSignature: String {
+        guard let last = store.messages.last else { return "" }
+        let count = store.assignmentCards(forAssistantMessageId: last.id).count
+        return "\(last.id)#\(count)"
+    }
+
+    private func scrollToLatest(proxy: ScrollViewProxy, animated: Bool) {
+        guard let last = store.messages.last else { return }
+        if animated {
+            withAnimation(.easeOut(duration: 0.2)) {
+                proxy.scrollTo(last.id, anchor: .bottom)
+            }
+        } else {
+            proxy.scrollTo(last.id, anchor: .bottom)
         }
     }
 

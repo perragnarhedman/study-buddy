@@ -57,7 +57,6 @@ def test_prompts_can_format_without_missing_keys() -> None:
         {
             "user_message": "Help me",
             "plan_items_json": "[]",
-            "assignment_instructions": "",
             "conversation_history": "",
             "conversation_summary": "",
             "user_state_json": "{}",
@@ -70,7 +69,6 @@ def test_prompts_can_format_without_missing_keys() -> None:
     # Smoke check: placeholders were replaced and JSON braces didn't break templating.
     assert "Help me" in user
     assert "{plan_items_json}" not in user
-    assert "{assignment_instructions}" not in user
     assert "Decision JSON schema" in system
     assert "{week_start}" not in plan_user
     assert "{assignments_json}" not in plan_user

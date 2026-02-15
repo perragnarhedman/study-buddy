@@ -19,17 +19,14 @@ from app.models.schemas import (
 )
 from app.core.auth import AuthContext, require_user_id
 from app.core.db import (
-    append_chat_history,
     get_assignment_status_map,
     get_chat_history,
     get_last_selected_assignment_id,
     get_last_selected_plan_item_id,
+    persist_chat_turn,
     get_user_state,
     reset_conversation_state,
     set_assignment_status,
-    set_last_selected_assignment_id,
-    set_last_selected_plan_item_id,
-    upsert_user_state,
 )
 from app.services.openai_client import build_coach_prompt, coach_decide, coach_decide_with_raw
 from app.services.assignment_source import select_assignments
@@ -341,7 +338,6 @@ async def chat_send(
             }
         )
 
-    assignment_instructions = ""
     # Keep only the last 5 turns (≈10 messages) to reduce prompt size + reduce
     # amplification of any earlier mistakes in history.
     hist = get_chat_history(user_id=user_id, limit=10)
@@ -363,7 +359,6 @@ async def chat_send(
         prompt = build_coach_prompt(
             user_message=msg,
             plan_items_json=json.dumps(candidates, ensure_ascii=False),
-            assignment_instructions=assignment_instructions,
             conversation_history=conversation_history,
             conversation_summary=conversation_summary,
             user_state_json=user_state_json,
@@ -384,7 +379,6 @@ async def chat_send(
             decision, raw = await coach_decide_with_raw(
                 user_message=msg,
                 plan_items_json=json.dumps(candidates, ensure_ascii=False),
-                assignment_instructions=assignment_instructions,
                 conversation_history=conversation_history,
                 conversation_summary=conversation_summary,
                 user_state_json=user_state_json,
@@ -395,7 +389,6 @@ async def chat_send(
         return await coach_decide(
             user_message=msg,
             plan_items_json=json.dumps(candidates, ensure_ascii=False),
-            assignment_instructions=assignment_instructions,
             conversation_history=conversation_history,
             conversation_summary=conversation_summary,
             user_state_json=user_state_json,
@@ -460,33 +453,27 @@ async def chat_send(
         )
 
     # Optional: persist done status.
-    if mark_done_assignment_id:
-        set_assignment_status(
-            user_id=user_id,
-            source_assignment_id=mark_done_assignment_id,
-            status="done",
-            updated_at=int(time.time()),
-        )
-    elif decision.mark_done_plan_item_id:
+    if not mark_done_assignment_id and decision.mark_done_plan_item_id:
         done_item = next((it for it in plan_items if it.id == decision.mark_done_plan_item_id), None)
         if done_item and done_item.sourceAssignmentId:
-            set_assignment_status(
-                user_id=user_id,
-                source_assignment_id=done_item.sourceAssignmentId,
-                status="done",
-                updated_at=int(time.time()),
-            )
+            mark_done_assignment_id = done_item.sourceAssignmentId
 
     text = (decision.assistant_text or "").strip()
     if not text:
         raise HTTPException(status_code=502, detail="OpenAI returned empty response")
 
     now_ts = int(time.time())
-    # Update conversation memory + user state.
-    append_chat_history(user_id=user_id, role="user", text=user_text[:1200], created_at=now_ts)
-    append_chat_history(user_id=user_id, role="assistant", text=text[:1200], created_at=now_ts + 1)
-    upsert_user_state(
+    # Persist all mutations atomically to reduce race conditions between overlapping requests.
+    persist_chat_turn(
         user_id=user_id,
+        user_text=user_text,
+        assistant_text=text,
+        now_ts=now_ts,
+        conversation_summary=_update_rolling_summary(
+            str(user_state_obj.get("conversation_summary") or ""),
+            user_text,
+            text,
+        ),
         # Persist language preference only when it matches a server-side hint.
         # This reduces stickiness from a single wrong model reply_language.
         language_preference=(
@@ -494,18 +481,10 @@ async def chat_send(
             if isinstance(decision.reply_language, str) and decision.reply_language == lang_hint
             else None
         ),
-        last_intent=None,
-        conversation_summary=_update_rolling_summary(
-            str(user_state_obj.get("conversation_summary") or ""),
-            user_text,
-            text,
-        ),
-        updated_at=now_ts,
+        selected_plan_item_id=(best_next_action.id if best_next_action is not None else None),
+        selected_assignment_id=selected_assignment_id,
+        mark_done_assignment_id=mark_done_assignment_id,
     )
-    if best_next_action is not None:
-        set_last_selected_plan_item_id(user_id=user_id, plan_item_id=best_next_action.id, updated_at=now_ts)
-    if selected_assignment_id:
-        set_last_selected_assignment_id(user_id=user_id, assignment_id=selected_assignment_id, updated_at=now_ts)
 
     assistant_message = ChatMessage(id=new_id(), role="assistant", text=text, timestamp=iso_now())
 
