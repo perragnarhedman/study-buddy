@@ -25,6 +25,7 @@ class Settings(BaseSettings):
     sqlite_path: str = "backend.sqlite3"
     sqlite_timeout_seconds: float = 10.0
     sqlite_wal_enabled: bool = True
+    sqlite_synchronous_normal: bool = True
     openai_api_key: str = ""
     openai_chat_model: str = "gpt-5.2"
     openai_plan_model: str = "gpt-5-mini"
@@ -37,6 +38,13 @@ class Settings(BaseSettings):
     debug_export_enabled: bool = False
     debug_export_dir: str = "debug_exports"
 
+    # Classroom fetch controls.
+    classroom_max_concurrency: int = 5
+    classroom_cache_ttl_seconds: int = 20
+
+    # OAuth PKCE controls.
+    oauth_pkce_ttl_seconds: int = 600
+
     def cors_origins_list(self) -> list[str]:
         return [s.strip() for s in self.cors_origins.split(",") if s.strip()]
 
@@ -46,7 +54,7 @@ def get_settings() -> Settings:
     # Tests should be deterministic and must not accidentally read developer
     # secrets or local debug flags from `.env`.
     if os.getenv("PYTEST_CURRENT_TEST"):
-        return Settings()
+        return Settings(classroom_cache_ttl_seconds=0)
     try:
         return Settings(_env_file=".env", _env_file_encoding="utf-8")
     except OSError:

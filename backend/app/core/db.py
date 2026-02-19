@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import logging
 import sqlite3
+import time
+from contextlib import contextmanager
 from pathlib import Path
-from typing import Optional
+from typing import Iterator, Optional
 
 from app.core.config import get_settings
 
@@ -19,6 +21,8 @@ def get_conn() -> sqlite3.Connection:
     conn.execute(f"PRAGMA busy_timeout={int(settings.sqlite_timeout_seconds * 1000)}")
     if settings.sqlite_wal_enabled:
         conn.execute("PRAGMA journal_mode=WAL")
+    if settings.sqlite_synchronous_normal:
+        conn.execute("PRAGMA synchronous=NORMAL")
     _init(conn)
     try:
         # Helpful for Render persistent disk verification.
@@ -31,11 +35,13 @@ def get_conn() -> sqlite3.Connection:
     return conn
 
 
-def _close_quietly(conn: sqlite3.Connection) -> None:
+@contextmanager
+def db_conn() -> Iterator[sqlite3.Connection]:
+    conn = get_conn()
     try:
+        yield conn
+    finally:
         conn.close()
-    except Exception:
-        pass
 
 
 def _init(conn: sqlite3.Connection) -> None:
@@ -87,6 +93,16 @@ def _init(conn: sqlite3.Connection) -> None:
         )
         """
     )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS oauth_pkce_state (
+          state TEXT PRIMARY KEY,
+          verifier TEXT NOT NULL,
+          expires_at INTEGER NOT NULL,
+          created_at INTEGER NOT NULL
+        )
+        """
+    )
     # Lightweight migrations for existing DBs.
     _ensure_column(conn, "user_state", "last_selected_assignment_id", "TEXT")
     _ensure_column(conn, "user_state", "language_preference", "TEXT")
@@ -95,6 +111,9 @@ def _init(conn: sqlite3.Connection) -> None:
     _ensure_column(conn, "user_state", "conversation_summary", "TEXT")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_chat_history_user_created ON chat_history(user_id, created_at DESC)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_assignment_status_user_updated ON assignment_status(user_id, updated_at DESC)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_assignment_status_user_status ON assignment_status(user_id, status)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_user_state_updated_at ON user_state(updated_at DESC)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_pkce_expires_at ON oauth_pkce_state(expires_at)")
     conn.commit()
 
 
@@ -120,8 +139,7 @@ def upsert_tokens(
     scope: Optional[str],
     id_token: Optional[str],
 ) -> None:
-    conn = get_conn()
-    try:
+    with db_conn() as conn:
         with conn:
             conn.execute(
                 """
@@ -137,22 +155,16 @@ def upsert_tokens(
                 """,
                 (user_id, access_token, refresh_token, expires_at, token_type, scope, id_token),
             )
-    finally:
-        _close_quietly(conn)
 
 
 def get_tokens(user_id: str) -> Optional[dict]:
-    conn = get_conn()
-    try:
+    with db_conn() as conn:
         row = conn.execute("SELECT * FROM oauth_tokens WHERE user_id=?", (user_id,)).fetchone()
         return dict(row) if row else None
-    finally:
-        _close_quietly(conn)
 
 
 def set_assignment_status(*, user_id: str, source_assignment_id: str, status: str, updated_at: int) -> None:
-    conn = get_conn()
-    try:
+    with db_conn() as conn:
         with conn:
             conn.execute(
                 """
@@ -165,25 +177,19 @@ def set_assignment_status(*, user_id: str, source_assignment_id: str, status: st
                 """,
                 (user_id, source_assignment_id, status, updated_at),
             )
-    finally:
-        _close_quietly(conn)
 
 
 def get_assignment_status_map(*, user_id: str) -> dict[str, str]:
-    conn = get_conn()
-    try:
+    with db_conn() as conn:
         rows = conn.execute(
             "SELECT source_assignment_id, status FROM assignment_status WHERE user_id=?",
             (user_id,),
         ).fetchall()
         return {str(r["source_assignment_id"]): str(r["status"]) for r in rows}
-    finally:
-        _close_quietly(conn)
 
 
 def append_chat_history(*, user_id: str, role: str, text: str, created_at: int) -> None:
-    conn = get_conn()
-    try:
+    with db_conn() as conn:
         with conn:
             conn.execute(
                 "INSERT INTO chat_history (user_id, role, text, created_at) VALUES (?, ?, ?, ?)",
@@ -202,8 +208,6 @@ def append_chat_history(*, user_id: str, role: str, text: str, created_at: int) 
                 """,
                 (user_id,),
             )
-    finally:
-        _close_quietly(conn)
 
 
 def persist_chat_turn(
@@ -222,8 +226,7 @@ def persist_chat_turn(
     Persist all state mutations from one /chat/send turn in a single transaction.
     This reduces race-condition risk from interleaved writes across multiple connections.
     """
-    conn = get_conn()
-    try:
+    with db_conn() as conn:
         with conn:
             if mark_done_assignment_id:
                 conn.execute(
@@ -289,8 +292,6 @@ def persist_chat_turn(
                     now_ts,
                 ),
             )
-    finally:
-        _close_quietly(conn)
 
 
 def reset_conversation_state(
@@ -303,8 +304,7 @@ def reset_conversation_state(
     - Optionally clears assignment_status (useful for test harnesses)
     - Optionally clears language_preference / preferred_subject / last_intent
     """
-    conn = get_conn()
-    try:
+    with db_conn() as conn:
         with conn:
             conn.execute("DELETE FROM chat_history WHERE user_id=?", (user_id,))
             if clear_preferences:
@@ -347,13 +347,10 @@ def reset_conversation_state(
                 )
             if clear_assignment_status:
                 conn.execute("DELETE FROM assignment_status WHERE user_id=?", (user_id,))
-    finally:
-        _close_quietly(conn)
 
 
 def get_chat_history(*, user_id: str, limit: int = 10) -> list[dict]:
-    conn = get_conn()
-    try:
+    with db_conn() as conn:
         rows = conn.execute(
             """
             SELECT role, text, created_at
@@ -368,13 +365,10 @@ def get_chat_history(*, user_id: str, limit: int = 10) -> list[dict]:
         out = [{"role": str(r["role"]), "text": str(r["text"]), "created_at": int(r["created_at"])} for r in rows]
         out.reverse()
         return out
-    finally:
-        _close_quietly(conn)
 
 
 def set_last_selected_plan_item_id(*, user_id: str, plan_item_id: str, updated_at: int) -> None:
-    conn = get_conn()
-    try:
+    with db_conn() as conn:
         with conn:
             conn.execute(
                 """
@@ -387,13 +381,10 @@ def set_last_selected_plan_item_id(*, user_id: str, plan_item_id: str, updated_a
                 """,
                 (user_id, plan_item_id, updated_at),
             )
-    finally:
-        _close_quietly(conn)
 
 
 def set_last_selected_assignment_id(*, user_id: str, assignment_id: str, updated_at: int) -> None:
-    conn = get_conn()
-    try:
+    with db_conn() as conn:
         with conn:
             conn.execute(
                 """
@@ -406,13 +397,10 @@ def set_last_selected_assignment_id(*, user_id: str, assignment_id: str, updated
                 """,
                 (user_id, assignment_id, updated_at),
             )
-    finally:
-        _close_quietly(conn)
 
 
 def get_last_selected_assignment_id(*, user_id: str) -> Optional[str]:
-    conn = get_conn()
-    try:
+    with db_conn() as conn:
         row = conn.execute(
             "SELECT last_selected_assignment_id FROM user_state WHERE user_id=?",
             (user_id,),
@@ -421,13 +409,10 @@ def get_last_selected_assignment_id(*, user_id: str) -> Optional[str]:
             return None
         v = row["last_selected_assignment_id"]
         return str(v) if isinstance(v, str) and v else None
-    finally:
-        _close_quietly(conn)
 
 
 def get_last_selected_plan_item_id(*, user_id: str) -> Optional[str]:
-    conn = get_conn()
-    try:
+    with db_conn() as conn:
         row = conn.execute(
             "SELECT last_selected_plan_item_id FROM user_state WHERE user_id=?",
             (user_id,),
@@ -436,13 +421,10 @@ def get_last_selected_plan_item_id(*, user_id: str) -> Optional[str]:
             return None
         v = row["last_selected_plan_item_id"]
         return str(v) if isinstance(v, str) and v else None
-    finally:
-        _close_quietly(conn)
 
 
 def get_user_state(*, user_id: str) -> dict:
-    conn = get_conn()
-    try:
+    with db_conn() as conn:
         row = conn.execute(
             "SELECT last_selected_plan_item_id, last_selected_assignment_id, language_preference, last_intent, preferred_subject, conversation_summary FROM user_state WHERE user_id=?",
             (user_id,),
@@ -458,8 +440,6 @@ def get_user_state(*, user_id: str) -> dict:
             "conversation_summary": row["conversation_summary"],
         }
         return {k: v for k, v in out.items() if v is not None and v != ""}
-    finally:
-        _close_quietly(conn)
 
 
 def upsert_user_state(
@@ -471,8 +451,7 @@ def upsert_user_state(
     conversation_summary: Optional[str] = None,
     updated_at: int,
 ) -> None:
-    conn = get_conn()
-    try:
+    with db_conn() as conn:
         with conn:
             conn.execute(
                 """
@@ -488,7 +467,40 @@ def upsert_user_state(
                 """,
                 (user_id, language_preference, last_intent, preferred_subject, conversation_summary, updated_at),
             )
-    finally:
-        _close_quietly(conn)
+
+
+def put_pkce_state(*, state: str, verifier: str, ttl_seconds: int) -> None:
+    now = int(time.time())
+    expires_at = now + max(int(ttl_seconds), 1)
+    with db_conn() as conn:
+        with conn:
+            conn.execute("DELETE FROM oauth_pkce_state WHERE expires_at <= ?", (now,))
+            conn.execute(
+                """
+                INSERT INTO oauth_pkce_state (state, verifier, expires_at, created_at)
+                VALUES (?, ?, ?, ?)
+                ON CONFLICT(state) DO UPDATE SET
+                  verifier=excluded.verifier,
+                  expires_at=excluded.expires_at,
+                  created_at=excluded.created_at
+                """,
+                (state, verifier, expires_at, now),
+            )
+
+
+def pop_pkce_state(state: str) -> Optional[str]:
+    now = int(time.time())
+    with db_conn() as conn:
+        with conn:
+            row = conn.execute(
+                "SELECT verifier, expires_at FROM oauth_pkce_state WHERE state=?",
+                (state,),
+            ).fetchone()
+            conn.execute("DELETE FROM oauth_pkce_state WHERE state=? OR expires_at <= ?", (state, now))
+    if not row:
+        return None
+    if int(row["expires_at"]) <= now:
+        return None
+    return str(row["verifier"])
 
 
