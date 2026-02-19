@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+import logging
 import time
 from datetime import datetime, timezone
 from typing import Optional
@@ -12,6 +14,7 @@ from app.models.schemas import Assignment, AttachmentLink
 
 
 GOOGLE_API_BASE = "https://classroom.googleapis.com/v1"
+logger = logging.getLogger(__name__)
 
 
 async def fetch_classroom_assignments(user_id: str) -> list[Assignment]:
@@ -36,13 +39,26 @@ async def fetch_classroom_assignments(user_id: str) -> list[Assignment]:
         async with httpx.AsyncClient(timeout=10.0) as client:
             courses = await _list_courses(client, access_token)
             out: list[Assignment] = []
-            for c in courses:
+            settings = get_settings()
+            max_concurrency = max(int(settings.classroom_max_concurrency), 1)
+            semaphore = asyncio.Semaphore(max_concurrency)
+
+            async def _fetch_one_course(c: dict) -> list[Assignment]:
                 course_id = c.get("id")
                 course_name = c.get("name") or "Course"
                 if not course_id:
-                    continue
-                course_work = await _list_coursework(client, access_token, course_id)
-                out.extend(_normalize_coursework(course_work, course_name))
+                    return []
+                async with semaphore:
+                    try:
+                        course_work = await _list_coursework(client, access_token, course_id)
+                    except (ConnectionError, httpx.RequestError, httpx.HTTPStatusError):
+                        logger.warning("classroom_coursework_failed course_id=%s", course_id)
+                        return []
+                    return _normalize_coursework(course_work, str(course_name))
+
+            per_course = await asyncio.gather(*[_fetch_one_course(c) for c in courses], return_exceptions=False)
+            for rows in per_course:
+                out.extend(rows)
             return out
     except httpx.RequestError:
         raise ConnectionError("google_unreachable")
@@ -113,7 +129,7 @@ async def _list_coursework(client: httpx.AsyncClient, access_token: str, course_
         raise ConnectionError("google_unauthorized")
     if r.status_code == 403:
         # Some courses may be inaccessible for coursework; skip rather than failing everything.
-        print("classroom_coursework_forbidden used_classroom=true")
+        logger.info("classroom_coursework_forbidden used_classroom=true course_id=%s", course_id)
         return []
     # Some classes may have no coursework; Google returns 404 sometimes.
     if r.status_code == 404:
