@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import json
+import logging
 import os
 import time
 from typing import Optional
@@ -16,6 +18,7 @@ from app.core.db import upsert_tokens
 from app.services.pkce_store import pkce_store
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 def _b64url(data: bytes) -> str:
@@ -74,7 +77,7 @@ def google_start() -> dict:
         authorization_url = authorization_url.copy_add_param(k, v)
 
     # Logging: high-level only, no secrets.
-    print("oauth_start used_classroom=true")
+    logger.info("oauth_start used_classroom=true")
     return {"authorization_url": str(authorization_url), "state": state}
 
 
@@ -165,12 +168,11 @@ def _sub_from_id_token(id_token: Optional[str]) -> Optional[str]:
         # pad
         payload_b64 += "=" * (-len(payload_b64) % 4)
         payload = base64.urlsafe_b64decode(payload_b64.encode("utf-8"))
-        import json
-
         obj = json.loads(payload.decode("utf-8"))
         sub = obj.get("sub")
         return sub if isinstance(sub, str) and sub else None
-    except Exception:
+    except (json.JSONDecodeError, UnicodeDecodeError, ValueError):
+        logger.warning("oauth_id_token_sub_parse_failed")
         return None
 
 

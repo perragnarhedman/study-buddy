@@ -1,32 +1,21 @@
 from __future__ import annotations
 
-import time
 from typing import Optional
+
+from app.core.config import get_settings
+from app.core.db import pop_pkce_state, put_pkce_state
 
 
 class PKCEStore:
-    def __init__(self, ttl_seconds: int = 600) -> None:
-        self.ttl_seconds = ttl_seconds
-        self._data: dict[str, tuple[str, float]] = {}
+    def __init__(self, ttl_seconds: Optional[int] = None) -> None:
+        settings = get_settings()
+        self.ttl_seconds = ttl_seconds if ttl_seconds is not None else settings.oauth_pkce_ttl_seconds
 
     def put(self, state: str, verifier: str) -> None:
-        self._data[state] = (verifier, time.time() + self.ttl_seconds)
+        put_pkce_state(state=state, verifier=verifier, ttl_seconds=self.ttl_seconds)
 
     def pop(self, state: str) -> Optional[str]:
-        self._gc()
-        item = self._data.pop(state, None)
-        if not item:
-            return None
-        verifier, expires_at = item
-        if time.time() > expires_at:
-            return None
-        return verifier
-
-    def _gc(self) -> None:
-        now = time.time()
-        expired = [k for k, (_, exp) in self._data.items() if now > exp]
-        for k in expired:
-            self._data.pop(k, None)
+        return pop_pkce_state(state)
 
 
 pkce_store = PKCEStore()
