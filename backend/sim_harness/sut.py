@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
 from pydantic import ValidationError
@@ -16,6 +17,21 @@ def _truncate(s: Optional[str], n: int) -> str:
     return s.strip()[:n]
 
 
+def _due_metadata(due_date: Optional[str]) -> Dict[str, Any]:
+    if not (isinstance(due_date, str) and due_date):
+        return {"is_due_soon": False, "is_overdue": False, "due_in_days": None}
+    try:
+        dt = datetime.fromisoformat(due_date.replace("Z", "+00:00"))
+        days = (dt.date() - datetime.now(timezone.utc).date()).days
+        return {
+            "is_due_soon": days <= 3,
+            "is_overdue": days < 0,
+            "due_in_days": days,
+        }
+    except Exception:
+        return {"is_due_soon": False, "is_overdue": False, "due_in_days": None}
+
+
 def build_candidates(assignments: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     out: List[Dict[str, Any]] = []
     for a in assignments:
@@ -26,18 +42,22 @@ def build_candidates(assignments: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         course = a.get("courseName")
         if not (isinstance(aid, str) and isinstance(title, str) and isinstance(course, str)):
             continue
+        due_date = a.get("dueDate") if isinstance(a.get("dueDate"), str) else None
+        due_meta = _due_metadata(due_date)
         out.append(
             {
                 "id": aid,
                 "title": title,
                 "courseName": course,
-                "dueDate": a.get("dueDate") if isinstance(a.get("dueDate"), str) else None,
+                "dueDate": due_date,
                 "estimatedMinutes": a.get("estimatedMinutes") if isinstance(a.get("estimatedMinutes"), int) else None,
                 "description": _truncate(a.get("description"), 1000),
                 "url": a.get("url") if isinstance(a.get("url"), str) else None,
                 "status": a.get("status") if a.get("status") in ("todo", "doing", "done") else "todo",
                 "is_last_selected": False,
-                "is_due_soon": False,
+                "is_due_soon": due_meta["is_due_soon"],
+                "is_overdue": due_meta["is_overdue"],
+                "due_in_days": due_meta["due_in_days"],
             }
         )
     return out

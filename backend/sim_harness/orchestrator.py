@@ -33,7 +33,7 @@ def _is_ack(text: str) -> bool:
 
 
 async def run_scenario(*, scenario: Scenario, config: RunConfig) -> RunResult:
-    tw = TraceWriter.create(output_dir=config.output_dir)
+    tw = TraceWriter.create(output_dir=config.output_dir, scenario_id=scenario.scenario_id)
     start = time.time()
 
     tw.write_event(
@@ -209,8 +209,15 @@ async def run_scenario(*, scenario: Scenario, config: RunConfig) -> RunResult:
                 if sid and sid in forbidden:
                     failures.append("selected_assignment_id_forbidden")
                     break
-        if scenario.expected.expected_mark_done_assignment_id and last_mark_done != scenario.expected.expected_mark_done_assignment_id:
-            failures.append("expected_mark_done_assignment_id_mismatch")
+        if scenario.expected.expected_mark_done_assignment_id:
+            turn = scenario.expected.expected_mark_done_assignment_id_turn
+            if isinstance(turn, int):
+                got = mark_done_by_turn.get(turn)
+                if got != scenario.expected.expected_mark_done_assignment_id:
+                    failures.append("expected_mark_done_assignment_id_mismatch")
+            else:
+                if last_mark_done != scenario.expected.expected_mark_done_assignment_id:
+                    failures.append("expected_mark_done_assignment_id_mismatch")
         if scenario.expected.expected_reply_language and last_reply_language != scenario.expected.expected_reply_language:
             failures.append("expected_reply_language_mismatch")
         if scenario.expected.assistant_text_must_contain:
@@ -238,6 +245,7 @@ async def run_scenario(*, scenario: Scenario, config: RunConfig) -> RunResult:
             "duration_ms": int((time.time() - start) * 1000),
         }
     )
+    tw.finalize_outcome(passed=ok)
     return RunResult(
         scenario_id=scenario.scenario_id,
         ok=ok,

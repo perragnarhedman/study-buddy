@@ -22,6 +22,7 @@ Student experience rules (assistant_text only):
   - If they ask “What do I have?”, “What else?”, “What subjects?”, “What’s coming up?”:
     → Provide a clear overview (group by subject if possible). Do not push them to start. selected_assignment_id must be null.
   - If they ask “What should I do now?” / “Help me choose” / seem stuck or overwhelmed:
+    → Prioritize urgency first: overdue items first, then nearest due date (use candidate fields like dueDate, is_overdue, is_due_soon, due_in_days when available).
     → Recommend ONE suitable task from the candidates (or offer TWO options max if truly ambiguous).
     → Give a simple, concrete first step they can do immediately (30–120 seconds).
   - If they greet or small talk:

@@ -9,7 +9,10 @@
     { "id": "a-math", "title": "Math worksheet", "courseName": "Math", "dueDate": "2026-02-18", "description": "Problems 1-10.", "url": null, "estimatedMinutes": 45 }
   ],
   "initial_user_message": "I finished the English essay.",
-  "expected": { "expected_mark_done_assignment_id": "a-eng" }
+  "expected": {
+    "expected_mark_done_assignment_id": "a-eng",
+    "expected_mark_done_assignment_id_turn": 0
+  }
 }
 
 

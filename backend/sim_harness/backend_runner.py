@@ -85,7 +85,7 @@ async def run_backend_integration_suite(
     results: List[Dict[str, Any]] = []
 
     for sc in scenarios:
-        tw = TraceWriter.create(output_dir=output_dir)
+        tw = TraceWriter.create(output_dir=output_dir, scenario_id=sc.scenario_id)
         start = time.time()
 
         # Per-scenario isolated backend env + DB (in-process mode only).
@@ -147,6 +147,7 @@ async def run_backend_integration_suite(
                     "duration_ms": int((time.time() - start) * 1000),
                 }
             )
+            tw.finalize_outcome(passed=ok)
             results.append(
                 {
                     "scenario_id": sc.scenario_id,
@@ -219,6 +220,7 @@ async def run_backend_integration_suite(
                 "duration_ms": int((time.time() - start) * 1000),
             }
         )
+        tw.finalize_outcome(passed=ok)
         results.append(
             {
                 "scenario_id": sc.scenario_id,

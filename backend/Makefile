@@ -18,10 +18,22 @@ sim-extended:
 sim-extended-openai:
 	python3 -m sim_harness.cli extended
 
+sim-extended-openai-env:
+	@set -a; \
+	[ -f .env ] && . ./.env; \
+	set +a; \
+	./.venv/bin/python -m sim_harness.cli extended
+
 sim-backend:
 	python3 -m sim_harness.cli backend
 
 sim-backend-openai:
 	python3 -m sim_harness.cli backend --use-openai-coach
+
+sim-backend-openai-env:
+	@set -a; \
+	[ -f .env ] && . ./.env; \
+	set +a; \
+	./.venv/bin/python -m sim_harness.cli backend --use-openai-coach
 
 

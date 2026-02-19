@@ -310,12 +310,18 @@ async def chat_send(
     for a in candidate_assignments:
         desc = ""
         due_soon = False
+        overdue = False
+        due_in_days = None
         if isinstance(a.dueDate, str) and a.dueDate:
             try:
                 dt = datetime.fromisoformat(a.dueDate.replace("Z", "+00:00"))
-                due_soon = (dt.date() - datetime.now(timezone.utc).date()).days <= 3
+                due_in_days = (dt.date() - datetime.now(timezone.utc).date()).days
+                due_soon = due_in_days <= 3
+                overdue = due_in_days < 0
             except Exception:
                 due_soon = False
+                overdue = False
+                due_in_days = None
         d = a.description
         if isinstance(d, str):
             desc = d.strip()[:1000]
@@ -332,6 +338,8 @@ async def chat_send(
                 "status": assignment_status_map.get(a.id, "todo"),
                 "is_last_selected": bool(last_selected_assignment_id and a.id == last_selected_assignment_id),
                 "is_due_soon": due_soon,
+                "is_overdue": overdue,
+                "due_in_days": due_in_days,
             }
         )
 

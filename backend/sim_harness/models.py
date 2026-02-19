@@ -39,6 +39,9 @@ class ScenarioExpected(BaseModel):
     forbidden_selected_assignment_ids: List[str] = Field(default_factory=list)
     # If set, the final coach turn must mark this assignment as done.
     expected_mark_done_assignment_id: Optional[str] = None
+    # If set, validate expected_mark_done_assignment_id on this specific coach turn index (0-based).
+    # If omitted, we validate on the final coach turn for backward compatibility.
+    expected_mark_done_assignment_id_turn: Optional[int] = None
     # If set, the final coach turn must reply in this language.
     expected_reply_language: Optional[Language] = None
     # If set, the final coach assistant_text must contain all of these substrings.
