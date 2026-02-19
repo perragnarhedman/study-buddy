@@ -1,8 +1,10 @@
 import json
+import logging
 import time
 from datetime import date, datetime, timezone
 from typing import Optional
 
+import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import ValidationError
 
@@ -33,6 +35,7 @@ from app.services.assignment_source import select_assignments
 from app.services.debug_export import export_chat_trace
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 def _is_overview_request(text: str) -> bool:
     """
@@ -234,21 +237,15 @@ async def chat_send(
 
     user_text = (payload.user_message or "").strip()
     if not user_text:
-        import logging
-
-        logging.getLogger(__name__).warning("chat_send_400 user_message_required user_id=%s", user_id)
+        logger.warning("chat_send_400 user_message_required user_id=%s", user_id)
         raise HTTPException(status_code=400, detail="user_message required")
 
     # Single source of truth: the client must provide current_plan.
     if not payload.current_plan:
-        import logging
-
-        logging.getLogger(__name__).warning("chat_send_400 current_plan_missing user_id=%s", user_id)
+        logger.warning("chat_send_400 current_plan_missing user_id=%s", user_id)
         raise HTTPException(status_code=400, detail="current_plan is required")
     if not payload.current_plan.items:
-        import logging
-
-        logging.getLogger(__name__).warning("chat_send_400 current_plan_items_empty user_id=%s", user_id)
+        logger.warning("chat_send_400 current_plan_items_empty user_id=%s", user_id)
         raise HTTPException(status_code=400, detail="current_plan.items is required")
     plan_items = payload.current_plan.items
 
@@ -399,10 +396,10 @@ async def chat_send(
     try:
         decision = await _call_coach()
     except (ValueError, ValidationError) as e:
-        print(f"chat_send openai_error={type(e).__name__}")
+        logger.warning("chat_send_openai_invalid_json error=%s", type(e).__name__)
         raise HTTPException(status_code=502, detail="OpenAI returned invalid JSON")
-    except Exception as e:
-        print(f"chat_send openai_error={type(e).__name__}")
+    except (httpx.HTTPError, RuntimeError, TimeoutError) as e:
+        logger.warning("chat_send_openai_unavailable error=%s", type(e).__name__)
         raise HTTPException(status_code=503, detail="OpenAI unavailable")
 
     candidate_ids = {a.id for a in candidate_assignments}
@@ -422,10 +419,10 @@ async def chat_send(
                     "If you set selected_assignment_id, it MUST be one of the candidate ids (or null). Do not invent ids."
                 )
             except (ValueError, ValidationError) as e:
-                print(f"chat_send openai_error={type(e).__name__}")
+                logger.warning("chat_send_openai_invalid_json error=%s", type(e).__name__)
                 raise HTTPException(status_code=502, detail="OpenAI returned invalid JSON")
-            except Exception as e:
-                print(f"chat_send openai_error={type(e).__name__}")
+            except (httpx.HTTPError, RuntimeError, TimeoutError) as e:
+                logger.warning("chat_send_openai_unavailable error=%s", type(e).__name__)
                 raise HTTPException(status_code=503, detail="OpenAI unavailable")
             selected_assignment_id = getattr(decision, "selected_assignment_id", None) or selected_assignment_id
             if selected_assignment_id and selected_assignment_id not in candidate_ids:

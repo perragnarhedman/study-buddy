@@ -1,4 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
+import httpx
+import logging
 
 from app.models.schemas import WeeklyPlan
 from app.core.auth import AuthContext, require_user_id
@@ -6,6 +8,7 @@ from app.services.planning import generate_weekly_plan_openai_required
 from app.core.config import get_settings
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 @router.get("/plan/week", response_model=WeeklyPlan)
@@ -18,9 +21,9 @@ async def get_week_plan(ctx: AuthContext = Depends(require_user_id)) -> WeeklyPl
         return plan
     except HTTPException:
         raise
-    except Exception:
+    except (RuntimeError, ValueError, httpx.HTTPError, TimeoutError):
         # High-level only; do not log secrets.
-        print("plan_week openai_required=true error=exception")
+        logger.exception("plan_week_failed openai_required=true")
         raise HTTPException(status_code=503, detail="OpenAI unavailable")
 
 

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from datetime import date
 from typing import Optional, Tuple
 
@@ -10,6 +11,8 @@ from app.models.schemas import PlanItem, WeeklyPlan, week_start_iso
 from app.services.assignment_source import select_assignments
 from app.services.openai_client import plan_week, _parse_json_object_relaxed
 from app.services.rails import normalize_weekly_plan, rails_enforce
+
+logger = logging.getLogger(__name__)
 
 
 async def generate_weekly_plan_openai_required(
@@ -44,7 +47,7 @@ async def generate_weekly_plan_openai_required(
                 sid = it.sourceAssignmentId
                 if sid and sid in status_map:
                     it.status = status_map[sid]  # "todo|doing|done"
-    print("planner=llm required=true")
+    logger.info("planner=llm required=true")
     return plan, {"planner": "llm", **src_meta}
 
 def _assignments_json(assignments) -> str:
