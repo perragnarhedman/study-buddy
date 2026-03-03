@@ -3,7 +3,6 @@
 ### Goal
 
 - **Chat tab**: WhatsApp-like chat UI that behaves like a performance coach.
-- **Plan tab**: persistent weekly overview + one “Best Next Action”.
 - **Backend**: FastAPI API using OpenAI-backed planning/coaching and Google Classroom data.
 
 ### Monorepo layout (invariants)
@@ -26,7 +25,7 @@
 #### Stable endpoints (do not change)
 
 - `GET /health` → `{ "status": "ok" }`
-- `POST /chat/send` → OpenAI coach decision + assistant response (+ optional assignment cards)
+- `POST /chat/send` → OpenAI coach decision + assistant response
 - `GET /plan/week` → OpenAI-generated weekly plan
 - `GET /auth/google/start` / `GET /auth/google/callback` → Google OAuth + session issuance
 
@@ -50,8 +49,8 @@
 
 ### iOS (Phase 1)
 
-- **State**: one observable store holding `[ChatMessage]` + `WeeklyPlan`
+- **State**: one observable store holding `[ChatMessage]` (+ optional `best_next_action`)
 - **Debug**: `Use Stub Data` toggle (AppStorage). If ON or network fails, show stub.
-- **Networking**: `APIClient` with `health()`, `sendChat()`, `fetchWeeklyPlan()`
+- **Networking**: `APIClient` with `health()`, `sendChat()`
 
 

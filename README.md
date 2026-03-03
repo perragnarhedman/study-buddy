@@ -40,7 +40,6 @@ Backend runs at `http://127.0.0.1:8000` by default.
 Dev notes:
 - `docs/IOS_SIMULATOR_SWEDISH_KEYBOARD.md` (type å/ä/ö in the iOS Simulator)
 - `docs/IOS_TESTFLIGHT_FIRST_BUILD.md` (first TestFlight build checklist)
-- `docs/CHAT_ASSIGNMENT_CARDS_CONTRACT.md` (chat “assignment cards” API contract)
 
 ### Tests
 

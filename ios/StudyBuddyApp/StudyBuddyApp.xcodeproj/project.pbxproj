@@ -15,7 +15,6 @@
 		11111111111111111111111C /* DueDateDisplay.swift in Sources */ = {isa = PBXBuildFile; fileRef = 222222222222222222222233 /* DueDateDisplay.swift */; };
 		111111111111111111111115 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 222222222222222222222226 /* RootView.swift */; };
 		111111111111111111111116 /* ChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 222222222222222222222227 /* ChatView.swift */; };
-		111111111111111111111117 /* PlanView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 222222222222222222222228 /* PlanView.swift */; };
 		111111111111111111111118 /* DebugSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 222222222222222222222229 /* DebugSettingsView.swift */; };
 		111111111111111111111119 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 222222222222222222222230 /* Assets.xcassets */; };
 		11111111111111111111111A /* Preview Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 222222222222222222222231 /* Preview Assets.xcassets */; };
@@ -32,7 +31,6 @@
 		222222222222222222222233 /* DueDateDisplay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DueDateDisplay.swift; sourceTree = "<group>"; };
 		222222222222222222222226 /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
 		222222222222222222222227 /* ChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatView.swift; sourceTree = "<group>"; };
-		222222222222222222222228 /* PlanView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlanView.swift; sourceTree = "<group>"; };
 		222222222222222222222229 /* DebugSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebugSettingsView.swift; sourceTree = "<group>"; };
 		222222222222222222222230 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		222222222222222222222231 /* Preview Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = "Preview Assets.xcassets"; sourceTree = "<group>"; };
@@ -87,7 +85,6 @@
 			children = (
 				222222222222222222222226 /* RootView.swift */,
 				222222222222222222222227 /* ChatView.swift */,
-				222222222222222222222228 /* PlanView.swift */,
 				222222222222222222222229 /* DebugSettingsView.swift */,
 			);
 			path = Views;
@@ -187,7 +184,6 @@
 				11111111111111111111111C /* DueDateDisplay.swift in Sources */,
 				111111111111111111111115 /* RootView.swift in Sources */,
 				111111111111111111111116 /* ChatView.swift in Sources */,
-				111111111111111111111117 /* PlanView.swift in Sources */,
 				111111111111111111111118 /* DebugSettingsView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

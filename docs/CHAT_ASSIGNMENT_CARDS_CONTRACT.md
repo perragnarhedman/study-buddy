@@ -1,11 +1,13 @@
 ## Chat assignment cards — API contract (be-27q)
 
-When the student asks for an overview (for example “what assignments do I have this week?”), the backend can return **assignment cards** along with the normal assistant text. The iOS app renders these cards inline in the chat conversation.
+**Status: DEPRECATED.** Assignment cards were removed in the chat-only refactor (iOS no longer renders cards, and the backend no longer returns `assignment_cards` from `POST /chat/send`). This document is kept for historical context.
+
+When the student asked for an overview (for example “what assignments do I have this week?”), the backend used to return **assignment cards** along with the normal assistant text. The iOS app used to render these cards inline in the chat conversation.
 
 ### Where it appears
 
 - Endpoint: `POST /chat/send`
-- Field: `assignment_cards` (optional)
+- Field: `assignment_cards` (optional, removed)
 
 ### JSON shape
 
@@ -23,9 +25,9 @@ When the student asks for an overview (for example “what assignments do I have
 
 ### Status updates
 
-To persist a status change triggered by tapping a card:
+To persist a status change triggered by tapping a card (removed):
 
-- Endpoint: `POST /assignment/status`
+- Endpoint: `POST /assignment/status` (removed)
 - Body:
   - `sourceAssignmentId` (string)
   - `status` ("todo" | "doing" | "done")

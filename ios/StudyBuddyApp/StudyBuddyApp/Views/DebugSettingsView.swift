@@ -7,7 +7,6 @@ struct DebugSettingsView: View {
 
     @State private var draftBaseURL: String = ""
     @State private var authStatus: String? = nil
-    @State private var showResetStatusesConfirm: Bool = false
 
     var body: some View {
         NavigationStack {
@@ -80,11 +79,6 @@ struct DebugSettingsView: View {
                         Task { await store.resetConversation() }
                     }
                     .disabled(store.useStubData == false && (store.sessionToken ?? "").isEmpty)
-
-                    Button("Reset my assignment statuses") {
-                        showResetStatusesConfirm = true
-                    }
-                    .disabled(store.useStubData == false && (store.sessionToken ?? "").isEmpty)
                 }
             }
             .navigationTitle("Debug Settings")
@@ -104,18 +98,6 @@ struct DebugSettingsView: View {
             .onAppear {
                 draftBaseURL = store.baseURL
                 Task { await store.refreshClassroomAssignmentsImportedCount() }
-            }
-            .confirmationDialog(
-                "Reset assignment statuses?",
-                isPresented: $showResetStatusesConfirm,
-                titleVisibility: .visible
-            ) {
-                Button("Reset statuses", role: .destructive) {
-                    Task { await store.resetMyAssignmentStatuses() }
-                }
-                Button("Cancel", role: .cancel) {}
-            } message: {
-                Text("This will clear your saved Done/Doing status so everything appears fresh again. (It also resets the current conversation state.)")
             }
         }
     }

@@ -7,13 +7,9 @@ final class AppStore: ObservableObject {
     @AppStorage("baseURL") var baseURL: String = "http://127.0.0.1:8000"
 
     @Published var messages: [ChatMessage] = []
-    // Cards associated with a specific assistant message id (rendered inline in Chat).
-    @Published var assignmentCardsByAssistantMessageId: [String: [AssignmentCard]] = [:]
-    @Published var weeklyPlan: WeeklyPlan? = nil
     @Published var bestNextActionFromChat: PlanItem? = nil
     @Published var classroomAssignmentsImported: Int? = nil
     @Published var classroomAssignments: [Assignment] = []
-    @Published var planErrorMessage: String? = nil
     @Published var chatErrorMessage: String? = nil
     @Published var chatInfoMessage: String? = nil
     @Published var authErrorMessage: String? = nil
@@ -36,7 +32,6 @@ final class AppStore: ObservableObject {
     func resetConversation() async {
         guard !useStubData else {
             messages = []
-            assignmentCardsByAssistantMessageId = [:]
             bestNextActionFromChat = nil
             chatErrorMessage = nil
             chatInfoMessage = "Conversation reset."
@@ -45,7 +40,6 @@ final class AppStore: ObservableObject {
         do {
             try await api.resetConversation(sessionToken: sessionToken)
             messages = []
-            assignmentCardsByAssistantMessageId = [:]
             bestNextActionFromChat = nil
             chatErrorMessage = nil
             chatInfoMessage = "Conversation reset."
@@ -55,88 +49,6 @@ final class AppStore: ObservableObject {
                 chatErrorMessage = "Please sign in (Settings → Connect Google Classroom)."
             } else {
                 chatErrorMessage = "Could not reset conversation. Check backend is running."
-            }
-        }
-    }
-
-    func resetMyAssignmentStatuses() async {
-        guard !useStubData else {
-            // No persisted status in stub mode; just refresh stub plan.
-            weeklyPlan = Self.stubWeeklyPlan()
-            bestNextActionFromChat = nil
-            assignmentCardsByAssistantMessageId = [:]
-            messages = []
-            chatErrorMessage = nil
-            chatInfoMessage = "Reset: assignment statuses cleared."
-            return
-        }
-        do {
-            try await api.resetConversation(sessionToken: sessionToken, clearAssignmentStatus: true)
-            // Endpoint resets conversation state as well, so mirror that locally.
-            messages = []
-            assignmentCardsByAssistantMessageId = [:]
-            bestNextActionFromChat = nil
-            chatErrorMessage = nil
-            chatInfoMessage = "Reset: assignment statuses cleared."
-            // Refresh plan so statuses show up as Todo again.
-            await loadWeeklyPlan(preserveChatAction: true)
-
-            // Fallback: if the backend didn't actually clear persisted done/doing state (stale deploy),
-            // explicitly set all current plan items back to todo.
-            if let plan = weeklyPlan, plan.items.contains(where: { $0.status == .done || $0.status == .doing }) {
-                let ids = Array(Set(plan.items.compactMap { $0.sourceAssignmentId }.filter { !$0.isEmpty }))
-                for sid in ids.prefix(20) {
-                    try? await api.setAssignmentStatus(sessionToken: sessionToken, sourceAssignmentId: sid, status: .todo)
-                }
-                await loadWeeklyPlan(preserveChatAction: true)
-            }
-        } catch {
-            if let apiError = error as? APIError, case .unauthorized = apiError {
-                authErrorMessage = "Please sign in to use Study Buddy."
-                chatErrorMessage = "Please sign in (Settings → Connect Google Classroom)."
-            } else {
-                chatErrorMessage = "Could not reset assignment statuses. Check backend is running."
-            }
-        }
-    }
-
-    func loadWeeklyPlan(preserveChatAction: Bool = false) async {
-        if useStubData {
-            weeklyPlan = Self.stubWeeklyPlan()
-            if !preserveChatAction { bestNextActionFromChat = nil }
-            planErrorMessage = nil
-            return
-        }
-
-        do {
-            let prevDone = Set(weeklyPlan?.items.filter { $0.status == .done }.map { $0.sourceAssignmentId ?? "" } ?? [])
-            weeklyPlan = try await api.fetchWeeklyPlan(sessionToken: sessionToken)
-            if !preserveChatAction { bestNextActionFromChat = nil }
-            planErrorMessage = nil
-            authErrorMessage = nil
-
-            // Simple confirmation feedback if something just became done.
-            let nextDone = Set(weeklyPlan?.items.filter { $0.status == .done }.map { $0.sourceAssignmentId ?? "" } ?? [])
-            if !prevDone.isEmpty || !nextDone.isEmpty {
-                let newDone = nextDone.subtracting(prevDone).filter { !$0.isEmpty }
-                if !newDone.isEmpty {
-                    chatInfoMessage = "Updated: marked as done in your plan."
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
-                        if self.chatInfoMessage == "Updated: marked as done in your plan." {
-                            self.chatInfoMessage = nil
-                        }
-                    }
-                }
-            }
-        } catch {
-            if !preserveChatAction { bestNextActionFromChat = nil }
-            if let apiError = error as? APIError, case .serviceUnavailable = apiError {
-                planErrorMessage = "Coach service unavailable (OpenAI). Check backend OPENAI_API_KEY."
-            } else if let apiError = error as? APIError, case .unauthorized = apiError {
-                authErrorMessage = "Please sign in to use Study Buddy."
-                planErrorMessage = "Please sign in (Settings → Connect Google Classroom)."
-            } else {
-                planErrorMessage = "Could not load plan. Check backend is running."
             }
         }
     }
@@ -194,56 +106,28 @@ final class AppStore: ObservableObject {
         )
 
         if useStubData {
-            let resp = Self.stubChatResponse(for: trimmed, currentPlan: weeklyPlan)
+            let resp = Self.stubChatResponse(for: trimmed)
             updateMessageText(id: assistantId, newText: resp.assistantMessage.text)
             bestNextActionFromChat = resp.bestNextAction
-            if let cards = resp.assignmentCards, !cards.isEmpty {
-                assignmentCardsByAssistantMessageId[assistantId] = cards
-            } else {
-                assignmentCardsByAssistantMessageId.removeValue(forKey: assistantId)
-            }
             chatErrorMessage = nil
-            if weeklyPlan == nil { weeklyPlan = Self.stubWeeklyPlan() }
-            return
-        }
-
-        // Ensure we have a current plan to send (backend requires current_plan).
-        if weeklyPlan == nil || weeklyPlan?.items.isEmpty == true {
-            await loadWeeklyPlan(preserveChatAction: true)
-        }
-        // If plan load failed, do NOT call /chat/send (backend will 400).
-        guard let currentPlan = weeklyPlan, !currentPlan.items.isEmpty else {
-            bestNextActionFromChat = nil
-            chatErrorMessage = "Plan not loaded. Open the Plan tab (or pull to refresh) and try again."
-            updateMessageText(id: assistantId, newText: "I can’t send that yet because your plan hasn’t loaded. Open the Plan tab and try again.")
             return
         }
 
         do {
-            let resp = try await api.sendChat(userMessage: trimmed, currentPlan: currentPlan, sessionToken: sessionToken)
+            let resp = try await api.sendChat(userMessage: trimmed, sessionToken: sessionToken)
             updateMessageText(id: assistantId, newText: resp.assistantMessage.text)
             bestNextActionFromChat = resp.bestNextAction
-            if let cards = resp.assignmentCards, !cards.isEmpty {
-                assignmentCardsByAssistantMessageId[assistantId] = cards
-            } else {
-                assignmentCardsByAssistantMessageId.removeValue(forKey: assistantId)
-            }
             chatErrorMessage = nil
             authErrorMessage = nil
-
-            // Refresh plan to reflect any done-state changes the agent may have persisted.
-            await loadWeeklyPlan(preserveChatAction: true)
         } catch {
             bestNextActionFromChat = nil
-            assignmentCardsByAssistantMessageId.removeValue(forKey: assistantId)
             if let apiError = error as? APIError, case .serviceUnavailable = apiError {
                 chatErrorMessage = "Coach service unavailable (OpenAI)."
                 updateMessageText(id: assistantId, newText: "Coach service unavailable right now (OpenAI).")
             } else if let apiError = error as? APIError, case .badRequest(let detail) = apiError {
-                // Usually means current_plan was missing or invalid. Treat as a plan-sync problem.
-                chatErrorMessage = "Chat request was invalid. Please open the Plan tab to refresh, then try again."
+                chatErrorMessage = "Chat request was invalid."
                 let short = detail.isEmpty ? "" : "\n\nDetails: \(detail)"
-                updateMessageText(id: assistantId, newText: "I couldn’t send that because your plan wasn’t included/valid. Open the Plan tab to refresh, then try again.\(short)")
+                updateMessageText(id: assistantId, newText: "I couldn’t send that.\(short)")
             } else if let apiError = error as? APIError, case .unauthorized = apiError {
                 authErrorMessage = "Please sign in to use Study Buddy."
                 chatErrorMessage = "Please sign in (Settings → Connect Google Classroom)."
@@ -255,59 +139,6 @@ final class AppStore: ObservableObject {
                 chatErrorMessage = "Could not reach backend."
                 updateMessageText(id: assistantId, newText: "Could not reach backend.")
             }
-        }
-    }
-
-    func assignmentCards(forAssistantMessageId id: String) -> [AssignmentCard] {
-        assignmentCardsByAssistantMessageId[id] ?? []
-    }
-
-    func markDoneFromCard(sourceAssignmentId: String) async {
-        // Optimistic local update (both plan and currently displayed cards).
-        if let plan = weeklyPlan {
-            let updated = plan.items.map { it -> PlanItem in
-                guard it.sourceAssignmentId == sourceAssignmentId else { return it }
-                return PlanItem(
-                    id: it.id,
-                    title: it.title,
-                    dueDate: it.dueDate,
-                    estimatedMinutes: it.estimatedMinutes,
-                    status: .done,
-                    sourceAssignmentId: it.sourceAssignmentId,
-                    attachments: it.attachments
-                )
-            }
-            weeklyPlan = WeeklyPlan(weekStart: plan.weekStart, items: updated)
-        }
-        assignmentCardsByAssistantMessageId = assignmentCardsByAssistantMessageId.mapValues { cards in
-            cards.map { c in
-                guard c.sourceAssignmentId == sourceAssignmentId || c.id == sourceAssignmentId else { return c }
-                return AssignmentCard(
-                    id: c.id,
-                    title: c.title,
-                    courseName: c.courseName,
-                    dueDate: c.dueDate,
-                    estimatedMinutes: c.estimatedMinutes,
-                    status: .done,
-                    sourceAssignmentId: c.sourceAssignmentId,
-                    url: c.url,
-                    attachments: c.attachments
-                )
-            }
-        }
-
-        guard !useStubData else { return }
-        do {
-            try await api.setAssignmentStatus(
-                sessionToken: sessionToken,
-                sourceAssignmentId: sourceAssignmentId,
-                status: .done
-            )
-            // Refresh plan so Plan/Chat stay consistent with persisted state.
-            await loadWeeklyPlan(preserveChatAction: true)
-        } catch {
-            // If this fails, just refresh from server to reconcile.
-            await loadWeeklyPlan(preserveChatAction: true)
         }
     }
 
@@ -323,85 +154,34 @@ final class AppStore: ObservableObject {
     }
 
     var bestNextAction: PlanItem? {
-        if let chatAction = bestNextActionFromChat {
-            return chatAction
-        }
-        guard let plan = weeklyPlan else { return nil }
-        return plan.items.first(where: { $0.status == .todo }) ?? plan.items.first
+        bestNextActionFromChat
     }
 
     // MARK: - Stubs
 
-    static func stubWeeklyPlan() -> WeeklyPlan {
-        let weekStart = Self.weekStartISO()
-        return WeeklyPlan(
-            weekStart: weekStart,
-            items: [
-                PlanItem(
-                    id: UUID().uuidString,
-                    title: "10-min starter: open your notes and write 3 topics to review",
-                    dueDate: nil,
-                    estimatedMinutes: 10,
-                    status: .todo,
-                    sourceAssignmentId: nil,
-                    attachments: nil
-                ),
-                PlanItem(
-                    id: UUID().uuidString,
-                    title: "15-min: outline 5 bullets for the next assignment/problem set",
-                    dueDate: nil,
-                    estimatedMinutes: 15,
-                    status: .todo,
-                    sourceAssignmentId: nil,
-                    attachments: nil
-                )
-            ]
-        )
-    }
-
-    static func stubChatResponse(for userText: String, currentPlan: WeeklyPlan?) -> ChatSendResponse {
+    static func stubChatResponse(for userText: String) -> ChatSendResponse {
         let assistant = ChatMessage(
             id: UUID().uuidString,
             role: .assistant,
             text: "Let’s keep momentum. Do a tiny starter now: set a 10‑minute timer and write the first 3 bullet points.\n\nYou said: \(userText)",
             timestamp: isoNow()
         )
-        let best = currentPlan?.items.first(where: { $0.status == .todo }) ?? stubWeeklyPlan().items.first
-        let lower = userText.lowercased()
-        let wantsOverview = lower.contains("this week") || lower.contains("assignments") || lower.contains("uppgifter") || lower.contains("denna vecka")
-        let cards: [AssignmentCard]? = wantsOverview
-            ? (currentPlan?.items.prefix(5).map { it in
-                AssignmentCard(
-                    id: it.sourceAssignmentId ?? it.id,
-                    title: it.title,
-                    courseName: nil,
-                    dueDate: it.dueDate,
-                    estimatedMinutes: it.estimatedMinutes,
-                    status: it.status,
-                    sourceAssignmentId: it.sourceAssignmentId,
-                    url: nil,
-                    attachments: nil
-                )
-            } ?? [])
-            : nil
-
-        return ChatSendResponse(assistantMessage: assistant, bestNextAction: best, assignmentCards: cards)
+        let best = PlanItem(
+            id: UUID().uuidString,
+            title: "Start a 10‑minute review sprint",
+            dueDate: nil,
+            estimatedMinutes: 10,
+            status: .todo,
+            sourceAssignmentId: nil,
+            attachments: nil
+        )
+        return ChatSendResponse(assistantMessage: assistant, bestNextAction: best)
     }
 
     static func isoNow() -> String {
         ISO8601DateFormatter().string(from: Date())
     }
 
-    static func weekStartISO() -> String {
-        let cal = Calendar(identifier: .iso8601)
-        let now = Date()
-        let comps = cal.dateComponents([.yearForWeekOfYear, .weekOfYear], from: now)
-        let start = cal.date(from: comps) ?? now
-        let formatter = DateFormatter()
-        formatter.calendar = cal
-        formatter.dateFormat = "yyyy-MM-dd"
-        return formatter.string(from: start)
-    }
 }
 
 

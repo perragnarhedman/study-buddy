@@ -8,9 +8,6 @@ struct StudyBuddyAppApp: App {
         WindowGroup {
             RootView()
                 .environmentObject(store)
-                .task {
-                    await store.loadWeeklyPlan()
-                }
                 .onOpenURL { url in
                     // studybuddy://auth?token=<SESSION_TOKEN>
                     guard url.scheme == "studybuddy" else { return }
@@ -21,7 +18,6 @@ struct StudyBuddyAppApp: App {
                     store.saveSessionToken(token)
                     Task {
                         await store.refreshClassroomAssignmentsImportedCount()
-                        await store.loadWeeklyPlan()
                     }
                 }
         }
