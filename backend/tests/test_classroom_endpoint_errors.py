@@ -9,3 +9,14 @@ def test_classroom_assignments_returns_401_when_unauthenticated() -> None:
     assert r.status_code == 401
 
 
+def test_classroom_materials_returns_401_when_unauthenticated() -> None:
+    client = TestClient(app)
+    r = client.get("/classroom/materials")
+    assert r.status_code == 401
+
+
+def test_classroom_announcements_returns_401_when_unauthenticated() -> None:
+    client = TestClient(app)
+    r = client.get("/classroom/announcements")
+    assert r.status_code == 401
+

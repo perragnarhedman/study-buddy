@@ -33,6 +33,26 @@ class Assignment(BaseModel):
     attachments: Optional[List[AttachmentLink]] = None
 
 
+class Material(BaseModel):
+    id: str
+    title: str
+    courseName: str
+    description: Optional[str] = None
+    url: Optional[str] = None
+    updatedAt: Optional[str] = None  # ISO8601
+    topicId: Optional[str] = None
+    attachments: Optional[List[AttachmentLink]] = None
+
+
+class Announcement(BaseModel):
+    id: str
+    courseName: str
+    text: str
+    url: Optional[str] = None
+    updatedAt: Optional[str] = None  # ISO8601
+    attachments: Optional[List[AttachmentLink]] = None
+
+
 class PlanItem(BaseModel):
     id: str
     title: str

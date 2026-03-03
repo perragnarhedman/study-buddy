@@ -39,5 +39,14 @@ Use `backend/env.example` as a copy/paste template for local dev env vars, OR se
   - `studybuddy://auth?token=<SESSION_TOKEN>`
 - The app stores the session token and can call:
   - `GET /classroom/assignments` with `Authorization: Bearer <SESSION_TOKEN>`
+  - `GET /classroom/materials` with `Authorization: Bearer <SESSION_TOKEN>`
+  - `GET /classroom/announcements` with `Authorization: Bearer <SESSION_TOKEN>`
+
+### Scopes note (Materials + Announcements)
+
+If you’ve previously connected Google Classroom, you may need to **disconnect/reconnect** (re-consent) after new scopes are added for:
+
+- `https://www.googleapis.com/auth/classroom.courseworkmaterials.readonly`
+- `https://www.googleapis.com/auth/classroom.announcements.readonly`
 
 

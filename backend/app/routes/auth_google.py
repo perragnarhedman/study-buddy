@@ -62,6 +62,8 @@ def google_start() -> dict:
                 # Needed to read teacher-assigned coursework as a student in many cases.
                 "https://www.googleapis.com/auth/classroom.coursework.students.readonly",
                 "https://www.googleapis.com/auth/classroom.coursework.me.readonly",
+                "https://www.googleapis.com/auth/classroom.courseworkmaterials.readonly",
+                "https://www.googleapis.com/auth/classroom.announcements.readonly",
             ]
         ),
         "state": state,

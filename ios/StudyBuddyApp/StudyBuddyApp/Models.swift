@@ -64,6 +64,26 @@ struct Assignment: Codable, Equatable {
     let attachments: [AttachmentLink]?
 }
 
+struct Material: Codable, Equatable {
+    let id: String
+    let title: String
+    let courseName: String
+    let description: String?
+    let url: String?
+    let updatedAt: String?
+    let topicId: String?
+    let attachments: [AttachmentLink]?
+}
+
+struct Announcement: Codable, Equatable {
+    let id: String
+    let courseName: String
+    let text: String
+    let url: String?
+    let updatedAt: String?
+    let attachments: [AttachmentLink]?
+}
+
 struct GoogleAuthStartResponse: Codable {
     let authorizationURL: String
     let state: String

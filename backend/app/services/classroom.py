@@ -10,7 +10,7 @@ import httpx
 
 from app.core.config import get_settings
 from app.core.db import get_tokens, upsert_tokens
-from app.models.schemas import Assignment, AttachmentLink
+from app.models.schemas import Announcement, Assignment, AttachmentLink, Material
 
 
 GOOGLE_API_BASE = "https://classroom.googleapis.com/v1"
@@ -64,6 +64,104 @@ async def fetch_classroom_assignments(user_id: str) -> list[Assignment]:
         raise ConnectionError("google_unreachable")
     except httpx.HTTPStatusError:
         # Any other unexpected Google HTTP error should not crash the API.
+        raise ConnectionError("google_http_error")
+
+
+async def fetch_classroom_materials(user_id: str) -> list[Material]:
+    tok = get_tokens(user_id)
+    if not tok:
+        raise PermissionError("no_tokens")
+
+    access_token = tok.get("access_token")
+    refresh_token = tok.get("refresh_token")
+    expires_at = tok.get("expires_at")
+
+    if not access_token:
+        raise PermissionError("no_access_token")
+
+    # Refresh if expired or near-expired.
+    if expires_at and int(expires_at) <= int(time.time()) + 60:
+        if not refresh_token:
+            raise PermissionError("no_refresh_token")
+        access_token = await _refresh_access_token(user_id, refresh_token)
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            courses = await _list_courses(client, access_token)
+            out: list[Material] = []
+            settings = get_settings()
+            max_concurrency = max(int(settings.classroom_max_concurrency), 1)
+            semaphore = asyncio.Semaphore(max_concurrency)
+
+            async def _fetch_one_course(c: dict) -> list[Material]:
+                course_id = c.get("id")
+                course_name = c.get("name") or "Course"
+                if not course_id:
+                    return []
+                async with semaphore:
+                    try:
+                        rows = await _list_coursework_materials(client, access_token, course_id)
+                    except (ConnectionError, httpx.RequestError, httpx.HTTPStatusError):
+                        logger.warning("classroom_materials_failed course_id=%s", course_id)
+                        return []
+                    return _normalize_coursework_materials(rows, str(course_name))
+
+            per_course = await asyncio.gather(*[_fetch_one_course(c) for c in courses], return_exceptions=False)
+            for rows in per_course:
+                out.extend(rows)
+            return out
+    except httpx.RequestError:
+        raise ConnectionError("google_unreachable")
+    except httpx.HTTPStatusError:
+        raise ConnectionError("google_http_error")
+
+
+async def fetch_classroom_announcements(user_id: str) -> list[Announcement]:
+    tok = get_tokens(user_id)
+    if not tok:
+        raise PermissionError("no_tokens")
+
+    access_token = tok.get("access_token")
+    refresh_token = tok.get("refresh_token")
+    expires_at = tok.get("expires_at")
+
+    if not access_token:
+        raise PermissionError("no_access_token")
+
+    # Refresh if expired or near-expired.
+    if expires_at and int(expires_at) <= int(time.time()) + 60:
+        if not refresh_token:
+            raise PermissionError("no_refresh_token")
+        access_token = await _refresh_access_token(user_id, refresh_token)
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            courses = await _list_courses(client, access_token)
+            out: list[Announcement] = []
+            settings = get_settings()
+            max_concurrency = max(int(settings.classroom_max_concurrency), 1)
+            semaphore = asyncio.Semaphore(max_concurrency)
+
+            async def _fetch_one_course(c: dict) -> list[Announcement]:
+                course_id = c.get("id")
+                course_name = c.get("name") or "Course"
+                if not course_id:
+                    return []
+                async with semaphore:
+                    try:
+                        rows = await _list_announcements(client, access_token, course_id)
+                    except (ConnectionError, httpx.RequestError, httpx.HTTPStatusError):
+                        logger.warning("classroom_announcements_failed course_id=%s", course_id)
+                        return []
+                    return _normalize_announcements(rows, str(course_name))
+
+            per_course = await asyncio.gather(*[_fetch_one_course(c) for c in courses], return_exceptions=False)
+            for rows in per_course:
+                out.extend(rows)
+            return out
+    except httpx.RequestError:
+        raise ConnectionError("google_unreachable")
+    except httpx.HTTPStatusError:
         raise ConnectionError("google_http_error")
 
 
@@ -139,6 +237,66 @@ async def _list_coursework(client: httpx.AsyncClient, access_token: str, course_
     return data.get("courseWork", []) or []
 
 
+async def _list_coursework_materials(client: httpx.AsyncClient, access_token: str, course_id: str) -> list[dict]:
+    out: list[dict] = []
+    page_token: Optional[str] = None
+    for _ in range(50):
+        params: dict[str, object] = {"pageSize": 50}
+        if page_token:
+            params["pageToken"] = page_token
+        r = await client.get(
+            f"{GOOGLE_API_BASE}/courses/{course_id}/courseWorkMaterials",
+            headers={"Authorization": f"Bearer {access_token}"},
+            params=params,
+        )
+        if r.status_code == 401:
+            raise ConnectionError("google_unauthorized")
+        if r.status_code == 403:
+            logger.info("classroom_materials_forbidden used_classroom=true course_id=%s", course_id)
+            return []
+        if r.status_code == 404:
+            return []
+        r.raise_for_status()
+        data = r.json()
+        rows = data.get("courseWorkMaterial", []) or []
+        if isinstance(rows, list):
+            out.extend([x for x in rows if isinstance(x, dict)])
+        page_token = data.get("nextPageToken")
+        if not isinstance(page_token, str) or not page_token:
+            break
+    return out
+
+
+async def _list_announcements(client: httpx.AsyncClient, access_token: str, course_id: str) -> list[dict]:
+    out: list[dict] = []
+    page_token: Optional[str] = None
+    for _ in range(50):
+        params: dict[str, object] = {"pageSize": 50, "orderBy": "updateTime desc"}
+        if page_token:
+            params["pageToken"] = page_token
+        r = await client.get(
+            f"{GOOGLE_API_BASE}/courses/{course_id}/announcements",
+            headers={"Authorization": f"Bearer {access_token}"},
+            params=params,
+        )
+        if r.status_code == 401:
+            raise ConnectionError("google_unauthorized")
+        if r.status_code == 403:
+            logger.info("classroom_announcements_forbidden used_classroom=true course_id=%s", course_id)
+            return []
+        if r.status_code == 404:
+            return []
+        r.raise_for_status()
+        data = r.json()
+        rows = data.get("announcements", []) or []
+        if isinstance(rows, list):
+            out.extend([x for x in rows if isinstance(x, dict)])
+        page_token = data.get("nextPageToken")
+        if not isinstance(page_token, str) or not page_token:
+            break
+    return out
+
+
 def _normalize_coursework(coursework: list[dict], course_name: str) -> list[Assignment]:
     out: list[Assignment] = []
     for w in coursework:
@@ -147,7 +305,7 @@ def _normalize_coursework(coursework: list[dict], course_name: str) -> list[Assi
         due_iso = _due_iso(w.get("dueDate"), w.get("dueTime"))
         desc = w.get("description")
         url = w.get("alternateLink")
-        materials = _normalize_materials(w.get("materials"))
+        materials = _normalize_materials(w.get("materials"), limit=5)
         attachments = [AttachmentLink(title=m["title"], url=m["url"]) for m in materials if isinstance(m.get("url"), str)]
 
         # Append attachments into description (schema stays stable).
@@ -177,13 +335,69 @@ def _normalize_coursework(coursework: list[dict], course_name: str) -> list[Assi
     return out
 
 
-def _normalize_materials(materials: object) -> list[dict]:
+def _normalize_coursework_materials(rows: list[dict], course_name: str) -> list[Material]:
+    out: list[Material] = []
+    for r in rows:
+        mid = r.get("id") or ""
+        title = r.get("title") or "Material"
+        desc = r.get("description")
+        url = r.get("alternateLink")
+        topic_id = r.get("topicId")
+        updated_at = r.get("updateTime") or r.get("creationTime")
+
+        materials = _normalize_materials(r.get("materials"), limit=20)
+        attachments = [AttachmentLink(title=m["title"], url=m["url"]) for m in materials if isinstance(m.get("url"), str)]
+        if materials and isinstance(materials[0].get("url"), str):
+            url = materials[0]["url"]
+
+        out.append(
+            Material(
+                id=str(mid),
+                title=str(title),
+                courseName=course_name,
+                description=str(desc) if isinstance(desc, str) else None,
+                url=str(url) if isinstance(url, str) else None,
+                updatedAt=str(updated_at) if isinstance(updated_at, str) else None,
+                topicId=str(topic_id) if isinstance(topic_id, str) else None,
+                attachments=attachments or None,
+            )
+        )
+    return out
+
+
+def _normalize_announcements(rows: list[dict], course_name: str) -> list[Announcement]:
+    out: list[Announcement] = []
+    for r in rows:
+        aid = r.get("id") or ""
+        text = r.get("text")
+        url = r.get("alternateLink")
+        updated_at = r.get("updateTime") or r.get("creationTime")
+
+        materials = _normalize_materials(r.get("materials"), limit=20)
+        attachments = [AttachmentLink(title=m["title"], url=m["url"]) for m in materials if isinstance(m.get("url"), str)]
+        if materials and isinstance(materials[0].get("url"), str):
+            url = materials[0]["url"]
+
+        out.append(
+            Announcement(
+                id=str(aid),
+                courseName=course_name,
+                text=str(text) if isinstance(text, str) else "",
+                url=str(url) if isinstance(url, str) else None,
+                updatedAt=str(updated_at) if isinstance(updated_at, str) else None,
+                attachments=attachments or None,
+            )
+        )
+    return out
+
+
+def _normalize_materials(materials: object, *, limit: int = 5) -> list[dict]:
     """
-    Convert Google Classroom courseWork.materials[] into a small list of {title,url}.
-    We keep schema stable by embedding this in Assignment.description and picking a primary Assignment.url.
+    Convert Google Classroom materials[] into a small list of {title,url}.
     """
     if not isinstance(materials, list):
         return []
+    limit = max(int(limit), 0)
     out: list[dict] = []
     for m in materials:
         if not isinstance(m, dict):
@@ -227,8 +441,8 @@ def _normalize_materials(materials: object) -> list[dict]:
                 out.append({"title": str(title), "url": url})
                 continue
 
-    # Keep it small for prompt size.
-    return out[:5]
+    # Keep it bounded (Google allows up to 20).
+    return out[:limit]
 
 
 def _due_iso(due_date: Optional[dict], due_time: Optional[dict]) -> Optional[str]:

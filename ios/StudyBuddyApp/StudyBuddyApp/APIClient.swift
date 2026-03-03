@@ -105,6 +105,30 @@ final class APIClient {
         guard (200..<300).contains(http.statusCode) else { throw APIError.badStatus(http.statusCode) }
         return try JSONDecoder().decode([Assignment].self, from: data)
     }
+
+    func fetchClassroomMaterials(sessionToken: String) async throws -> [Material] {
+        let u = try url("classroom/materials")
+        var req = URLRequest(url: u)
+        req.httpMethod = "GET"
+        req.setValue("Bearer \(sessionToken)", forHTTPHeaderField: "Authorization")
+        let (data, resp) = try await URLSession.shared.data(for: req)
+        guard let http = resp as? HTTPURLResponse else { throw APIError.badStatus(-1) }
+        if http.statusCode == 401 { throw APIError.unauthorized }
+        guard (200..<300).contains(http.statusCode) else { throw APIError.badStatus(http.statusCode) }
+        return try JSONDecoder().decode([Material].self, from: data)
+    }
+
+    func fetchClassroomAnnouncements(sessionToken: String) async throws -> [Announcement] {
+        let u = try url("classroom/announcements")
+        var req = URLRequest(url: u)
+        req.httpMethod = "GET"
+        req.setValue("Bearer \(sessionToken)", forHTTPHeaderField: "Authorization")
+        let (data, resp) = try await URLSession.shared.data(for: req)
+        guard let http = resp as? HTTPURLResponse else { throw APIError.badStatus(-1) }
+        if http.statusCode == 401 { throw APIError.unauthorized }
+        guard (200..<300).contains(http.statusCode) else { throw APIError.badStatus(http.statusCode) }
+        return try JSONDecoder().decode([Announcement].self, from: data)
+    }
 }
 
 
