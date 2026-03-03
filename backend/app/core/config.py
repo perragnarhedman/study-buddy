@@ -38,6 +38,12 @@ class Settings(BaseSettings):
     debug_export_enabled: bool = False
     debug_export_dir: str = "debug_exports"
 
+    # WhatsApp (Meta Cloud API)
+    whatsapp_verify_token: str = ""
+    whatsapp_app_secret: str = ""
+    whatsapp_access_token: str = ""
+    whatsapp_phone_number_id: str = ""
+
     # Classroom fetch controls.
     classroom_max_concurrency: int = 5
     classroom_cache_ttl_seconds: int = 20

@@ -10,6 +10,8 @@ from app.routes.chat import router as chat_router
 from app.routes.classroom import router as classroom_router
 from app.routes.health import router as health_router
 from app.routes.plan import router as plan_router
+from app.routes.whatsapp_link import router as whatsapp_link_router
+from app.routes.whatsapp_webhook import router as whatsapp_webhook_router
 
 
 def create_app() -> FastAPI:
@@ -49,6 +51,8 @@ def create_app() -> FastAPI:
     app.include_router(plan_router)
     app.include_router(auth_google_router)
     app.include_router(classroom_router)
+    app.include_router(whatsapp_link_router)
+    app.include_router(whatsapp_webhook_router)
     return app
 
 

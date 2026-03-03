@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import sqlite3
+import secrets
 import time
 from contextlib import contextmanager
 from pathlib import Path
@@ -103,6 +104,34 @@ def _init(conn: sqlite3.Connection) -> None:
         )
         """
     )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS whatsapp_link_codes (
+          code TEXT PRIMARY KEY,
+          user_id TEXT NOT NULL,
+          expires_at INTEGER NOT NULL,
+          created_at INTEGER NOT NULL,
+          used_at INTEGER
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS whatsapp_links (
+          wa_id TEXT PRIMARY KEY,
+          user_id TEXT NOT NULL,
+          linked_at INTEGER NOT NULL
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS whatsapp_inbound_dedup (
+          message_id TEXT PRIMARY KEY,
+          received_at INTEGER NOT NULL
+        )
+        """
+    )
     # Lightweight migrations for existing DBs.
     _ensure_column(conn, "user_state", "last_selected_assignment_id", "TEXT")
     _ensure_column(conn, "user_state", "language_preference", "TEXT")
@@ -114,6 +143,8 @@ def _init(conn: sqlite3.Connection) -> None:
     conn.execute("CREATE INDEX IF NOT EXISTS idx_assignment_status_user_status ON assignment_status(user_id, status)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_user_state_updated_at ON user_state(updated_at DESC)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_pkce_expires_at ON oauth_pkce_state(expires_at)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_whatsapp_link_codes_user_expires ON whatsapp_link_codes(user_id, expires_at)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_whatsapp_links_user ON whatsapp_links(user_id)")
     conn.commit()
 
 
@@ -502,5 +533,125 @@ def pop_pkce_state(state: str) -> Optional[str]:
     if int(row["expires_at"]) <= now:
         return None
     return str(row["verifier"])
+
+
+def create_whatsapp_link_code(*, user_id: str, ttl_seconds: int = 600, code_len: int = 6) -> tuple[str, int]:
+    """
+    Create a short-lived connect code that the user sends from WhatsApp:
+      LINK <code>
+    Returns (code, expires_at).
+    """
+    now = int(time.time())
+    expires_at = now + max(int(ttl_seconds), 1)
+    digits = "0123456789"
+    code_len = max(int(code_len), 4)
+
+    with db_conn() as conn:
+        with conn:
+            # Clean up expired/used codes opportunistically.
+            conn.execute(
+                "DELETE FROM whatsapp_link_codes WHERE expires_at <= ? OR used_at IS NOT NULL",
+                (now,),
+            )
+
+            # Try a few times to avoid rare collisions.
+            for _ in range(8):
+                code = "".join(secrets.choice(digits) for _ in range(code_len))
+                cur = conn.execute(
+                    """
+                    INSERT OR IGNORE INTO whatsapp_link_codes (code, user_id, expires_at, created_at, used_at)
+                    VALUES (?, ?, ?, ?, NULL)
+                    """,
+                    (code, user_id, expires_at, now),
+                )
+                if cur.rowcount == 1:
+                    return code, expires_at
+
+    raise RuntimeError("Failed to generate WhatsApp link code")
+
+
+def consume_whatsapp_link_code(*, code: str) -> Optional[str]:
+    """
+    Atomically validate + consume a link code. Returns user_id if successful.
+    """
+    now = int(time.time())
+    code = (code or "").strip()
+    if not code:
+        return None
+
+    with db_conn() as conn:
+        with conn:
+            row = conn.execute(
+                """
+                SELECT user_id, expires_at, used_at
+                FROM whatsapp_link_codes
+                WHERE code=?
+                """,
+                (code,),
+            ).fetchone()
+            if not row:
+                return None
+            if row["used_at"] is not None:
+                return None
+            if int(row["expires_at"]) <= now:
+                return None
+            conn.execute(
+                "UPDATE whatsapp_link_codes SET used_at=? WHERE code=? AND used_at IS NULL",
+                (now, code),
+            )
+            return str(row["user_id"])
+
+
+def upsert_whatsapp_link(*, wa_id: str, user_id: str, linked_at: Optional[int] = None) -> None:
+    wa_id = (wa_id or "").strip()
+    user_id = (user_id or "").strip()
+    if not wa_id or not user_id:
+        raise ValueError("wa_id and user_id are required")
+    ts = int(linked_at or time.time())
+    with db_conn() as conn:
+        with conn:
+            conn.execute(
+                """
+                INSERT INTO whatsapp_links (wa_id, user_id, linked_at)
+                VALUES (?, ?, ?)
+                ON CONFLICT(wa_id) DO UPDATE SET
+                  user_id=excluded.user_id,
+                  linked_at=excluded.linked_at
+                """,
+                (wa_id, user_id, ts),
+            )
+
+
+def get_user_id_by_whatsapp_id(*, wa_id: str) -> Optional[str]:
+    wa_id = (wa_id or "").strip()
+    if not wa_id:
+        return None
+    with db_conn() as conn:
+        row = conn.execute(
+            "SELECT user_id FROM whatsapp_links WHERE wa_id=?",
+            (wa_id,),
+        ).fetchone()
+        if not row:
+            return None
+        v = row["user_id"]
+        return str(v) if isinstance(v, str) and v else None
+
+
+def whatsapp_dedup_should_process(*, message_id: str, received_at: Optional[int] = None) -> bool:
+    """
+    Webhooks can be retried; use message_id to prevent double-processing.
+    Returns True if this message_id hasn't been seen before.
+    """
+    message_id = (message_id or "").strip()
+    if not message_id:
+        return True
+    ts = int(received_at or time.time())
+    with db_conn() as conn:
+        with conn:
+            cur = conn.execute(
+                "INSERT OR IGNORE INTO whatsapp_inbound_dedup (message_id, received_at) VALUES (?, ?)",
+                (message_id, ts),
+            )
+            return cur.rowcount == 1
 
 
