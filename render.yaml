@@ -1,0 +1,36 @@
+services:
+  - type: web
+    name: study-buddy-backend
+    env: docker
+    dockerfilePath: backend/Dockerfile
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      # Required
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: OPENAI_API_KEY
+        sync: false
+
+      # Google OAuth / Classroom (optional but required for Google sign-in)
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      # Preferred: set this and let the app derive GOOGLE_REDIRECT_URI automatically.
+      - key: PUBLIC_BASE_URL
+        sync: false
+
+      # Persistence (SQLite). For production consider attaching a persistent disk and using /var/data.
+      - key: SQLITE_PATH
+        value: /var/data/backend.sqlite3
+
+      # CORS: iOS apps don't need CORS, but keep sane defaults for any web tooling.
+      - key: CORS_ORIGINS
+        value: http://localhost:3000,http://127.0.0.1:3000
+
+      # Safety defaults
+      - key: DEBUG_EXPORT_ENABLED
+        value: "false"
+      - key: PROMPTS_HOT_RELOAD
+        value: "false"

@@ -15,7 +15,7 @@ struct RootView: View {
                         } label: {
                             Image(systemName: "gearshape")
                         }
-                        .accessibilityLabel("Debug Settings")
+                        .accessibilityLabel("Settings")
                     }
                 }
         }

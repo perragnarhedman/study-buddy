@@ -3,7 +3,7 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 56;
+	objectVersion = 60;
 	objects = {
 
 /* Begin PBXBuildFile section */
@@ -11,13 +11,13 @@
 		111111111111111111111112 /* AppStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 222222222222222222222223 /* AppStore.swift */; };
 		111111111111111111111113 /* APIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 222222222222222222222224 /* APIClient.swift */; };
 		111111111111111111111114 /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = 222222222222222222222225 /* Models.swift */; };
-		11111111111111111111111B /* Keychain.swift in Sources */ = {isa = PBXBuildFile; fileRef = 222222222222222222222232 /* Keychain.swift */; };
-		11111111111111111111111C /* DueDateDisplay.swift in Sources */ = {isa = PBXBuildFile; fileRef = 222222222222222222222233 /* DueDateDisplay.swift */; };
 		111111111111111111111115 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 222222222222222222222226 /* RootView.swift */; };
 		111111111111111111111116 /* ChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 222222222222222222222227 /* ChatView.swift */; };
 		111111111111111111111118 /* DebugSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 222222222222222222222229 /* DebugSettingsView.swift */; };
 		111111111111111111111119 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 222222222222222222222230 /* Assets.xcassets */; };
 		11111111111111111111111A /* Preview Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 222222222222222222222231 /* Preview Assets.xcassets */; };
+		11111111111111111111111B /* Keychain.swift in Sources */ = {isa = PBXBuildFile; fileRef = 222222222222222222222232 /* Keychain.swift */; };
+		11111111111111111111111C /* DueDateDisplay.swift in Sources */ = {isa = PBXBuildFile; fileRef = 222222222222222222222233 /* DueDateDisplay.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -27,24 +27,14 @@
 		222222222222222222222223 /* AppStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppStore.swift; sourceTree = "<group>"; };
 		222222222222222222222224 /* APIClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIClient.swift; sourceTree = "<group>"; };
 		222222222222222222222225 /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
-		222222222222222222222232 /* Keychain.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Keychain.swift; sourceTree = "<group>"; };
-		222222222222222222222233 /* DueDateDisplay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DueDateDisplay.swift; sourceTree = "<group>"; };
 		222222222222222222222226 /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
 		222222222222222222222227 /* ChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatView.swift; sourceTree = "<group>"; };
 		222222222222222222222229 /* DebugSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebugSettingsView.swift; sourceTree = "<group>"; };
 		222222222222222222222230 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		222222222222222222222231 /* Preview Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = "Preview Assets.xcassets"; sourceTree = "<group>"; };
+		222222222222222222222232 /* Keychain.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Keychain.swift; sourceTree = "<group>"; };
+		222222222222222222222233 /* DueDateDisplay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DueDateDisplay.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
-
-/* Begin PBXFrameworksBuildPhase section */
-		333333333333333333333333 /* Frameworks */ = {
-			isa = PBXFrameworksBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-/* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
 		444444444444444444444440 = {
@@ -70,14 +60,6 @@
 				444444444444444444444448 /* Preview Content */,
 			);
 			path = StudyBuddyApp;
-			sourceTree = "<group>";
-		};
-		44444444444444444444444A /* Utils */ = {
-			isa = PBXGroup;
-			children = (
-				222222222222222222222233 /* DueDateDisplay.swift */,
-			);
-			path = Utils;
 			sourceTree = "<group>";
 		};
 		444444444444444444444442 /* Views */ = {
@@ -106,6 +88,14 @@
 			name = Products;
 			sourceTree = "<group>";
 		};
+		44444444444444444444444A /* Utils */ = {
+			isa = PBXGroup;
+			children = (
+				222222222222222222222233 /* DueDateDisplay.swift */,
+			);
+			path = Utils;
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -114,7 +104,6 @@
 			buildConfigurationList = 666666666666666666666666 /* Build configuration list for PBXNativeTarget "StudyBuddyApp" */;
 			buildPhases = (
 				777777777777777777777771 /* Sources */,
-				777777777777777777777772 /* Frameworks */,
 				777777777777777777777773 /* Resources */,
 			);
 			buildRules = (
@@ -205,7 +194,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEBUG_INFORMATION_FORMAT = dwarf;
-				DEVELOPMENT_TEAM = "";
+				DEVELOPMENT_TEAM = 8MRM9JY95Z;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = StudyBuddyApp/Info.plist;
@@ -215,9 +204,10 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 0.1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = "com.example.StudyBuddyApp";
+				PRODUCT_BUNDLE_IDENTIFIER = io.studybuddy.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
+				STUDYBUDDY_DEFAULT_BASE_URL = "http://127.0.0.1:8000";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SUPPORTS_MACCATALYST = NO;
 				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
@@ -240,7 +230,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
-				DEVELOPMENT_TEAM = "";
+				DEVELOPMENT_TEAM = 8MRM9JY95Z;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = StudyBuddyApp/Info.plist;
@@ -250,9 +240,10 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 0.1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = "com.example.StudyBuddyApp";
+				PRODUCT_BUNDLE_IDENTIFIER = io.studybuddy.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
+				STUDYBUDDY_DEFAULT_BASE_URL = "https://study-buddy-backend.onrender.com";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SUPPORTS_MACCATALYST = NO;
 				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
@@ -261,7 +252,7 @@
 			};
 			name = Release;
 		};
-		999999999999999999999993 /* Project Debug */ = {
+		999999999999999999999993 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CLANG_ENABLE_MODULES = YES;
@@ -269,7 +260,7 @@
 			};
 			name = Debug;
 		};
-		999999999999999999999994 /* Project Release */ = {
+		999999999999999999999994 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CLANG_ENABLE_MODULES = YES;
@@ -283,8 +274,8 @@
 		666666666666666666666665 /* Build configuration list for PBXProject "StudyBuddyApp" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				999999999999999999999993 /* Project Debug */,
-				999999999999999999999994 /* Project Release */,
+				999999999999999999999993 /* Debug */,
+				999999999999999999999994 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;
@@ -299,9 +290,6 @@
 			defaultConfigurationName = Debug;
 		};
 /* End XCConfigurationList section */
-
 	};
 	rootObject = 888888888888888888888888 /* Project object */;
 }
-
-

@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 from functools import lru_cache
 
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -18,6 +19,9 @@ class Settings(BaseSettings):
     cors_origins: str = "http://localhost:3000,http://127.0.0.1:3000"
 
     # Phase 4/5
+    # Public base URL for this API when deployed (e.g. https://your-service.onrender.com).
+    # If set, we can derive google_redirect_uri automatically.
+    public_base_url: str = ""
     google_client_id: str = ""
     google_client_secret: str = ""  # optional depending on OAuth client type
     google_redirect_uri: str = ""
@@ -50,6 +54,15 @@ class Settings(BaseSettings):
 
     # OAuth PKCE controls.
     oauth_pkce_ttl_seconds: int = 600
+
+    @model_validator(mode="after")
+    def _derive_oauth_redirect_uri(self) -> "Settings":
+        # Keep backwards compatibility: allow explicit GOOGLE_REDIRECT_URI.
+        # For hosted deployments, PUBLIC_BASE_URL is easier to configure reliably.
+        if not self.google_redirect_uri and self.public_base_url:
+            base = self.public_base_url.rstrip("/")
+            self.google_redirect_uri = f"{base}/auth/google/callback"
+        return self
 
     def cors_origins_list(self) -> list[str]:
         return [s.strip() for s in self.cors_origins.split(",") if s.strip()]

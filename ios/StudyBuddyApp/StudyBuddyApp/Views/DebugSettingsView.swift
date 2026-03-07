@@ -11,6 +11,7 @@ struct DebugSettingsView: View {
     var body: some View {
         NavigationStack {
             Form {
+#if DEBUG
                 Section("Networking") {
                     TextField("Base URL", text: $draftBaseURL)
                         .textInputAutocapitalization(.never)
@@ -19,6 +20,13 @@ struct DebugSettingsView: View {
 
                     Toggle("Use Stub Data", isOn: $store.useStubData)
                 }
+#else
+                Section("Server") {
+                    Text(store.baseURL)
+                        .textSelection(.enabled)
+                        .foregroundStyle(.secondary)
+                }
+#endif
 
                 Section("Google Classroom") {
                     Button("Connect Google Classroom") {
@@ -69,7 +77,7 @@ struct DebugSettingsView: View {
                 }
 
                 Section("Tips") {
-                    Text("Run the backend locally and set Base URL to http://127.0.0.1:8000 (default).")
+                    Text("If sign-in fails, confirm the app is pointing at a reachable backend URL.")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
@@ -81,12 +89,17 @@ struct DebugSettingsView: View {
                     .disabled(store.useStubData == false && (store.sessionToken ?? "").isEmpty)
                 }
             }
+#if DEBUG
             .navigationTitle("Debug Settings")
+#else
+            .navigationTitle("Settings")
+#endif
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     Button("Close") { dismiss() }
                 }
+#if DEBUG
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Save") {
                         store.baseURL = draftBaseURL.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -94,9 +107,12 @@ struct DebugSettingsView: View {
                     }
                     .disabled(draftBaseURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
+#endif
             }
             .onAppear {
+#if DEBUG
                 draftBaseURL = store.baseURL
+#endif
                 Task { await store.refreshClassroomAssignmentsImportedCount() }
             }
         }
@@ -105,8 +121,12 @@ struct DebugSettingsView: View {
     private func connectGoogle() async {
         authStatus = "Opening Google sign-in…"
         do {
+#if DEBUG
             store.baseURL = draftBaseURL.trimmingCharacters(in: .whitespacesAndNewlines)
             let api = APIClient(baseURLString: store.baseURL)
+#else
+            let api = APIClient(baseURLString: store.baseURL)
+#endif
             let resp = try await api.googleAuthStart()
             guard let url = URL(string: resp.authorizationURL) else {
                 authStatus = "Invalid auth URL"

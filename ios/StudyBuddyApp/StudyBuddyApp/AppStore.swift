@@ -3,8 +3,8 @@ import SwiftUI
 
 @MainActor
 final class AppStore: ObservableObject {
-    @AppStorage("useStubData") var useStubData: Bool = true
-    @AppStorage("baseURL") var baseURL: String = "http://127.0.0.1:8000"
+    @AppStorage("useStubData") var useStubData: Bool = AppStore.defaultUseStubData
+    @AppStorage("baseURL") var baseURL: String = AppStore.defaultBaseURL
 
     @Published var messages: [ChatMessage] = []
     @Published var bestNextActionFromChat: PlanItem? = nil
@@ -16,6 +16,30 @@ final class AppStore: ObservableObject {
 
     private let sessionTokenKey = "studybuddy.sessionToken"
     var sessionToken: String? { Keychain.getString(forKey: sessionTokenKey) }
+
+    static var defaultBaseURL: String {
+        // Prefer build-time configuration (Info.plist substitution).
+        if let v = Bundle.main.object(forInfoDictionaryKey: "STUDYBUDDY_DEFAULT_BASE_URL") as? String {
+            let trimmed = v.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmed.isEmpty, !trimmed.hasPrefix("$(") {
+                return trimmed
+            }
+        }
+#if DEBUG
+        return "http://127.0.0.1:8000"
+#else
+        // Default for TestFlight/App Store: hosted backend (can be overridden via Info.plist).
+        return "https://study-buddy-backend.onrender.com"
+#endif
+    }
+
+    static var defaultUseStubData: Bool {
+#if DEBUG
+        return true
+#else
+        return false
+#endif
+    }
 
     func assignmentDescription(forSourceAssignmentId id: String?) -> String? {
         guard let id, !id.isEmpty else { return nil }
