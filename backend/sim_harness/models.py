@@ -50,6 +50,12 @@ class ScenarioExpected(BaseModel):
     assistant_text_forbidden_substrings: List[str] = Field(default_factory=list)
     # If set, limit number of question marks in final coach assistant_text.
     max_question_marks: Optional[int] = None
+    # If set, the final streamed assistant response must emit at least this many bubbles.
+    min_stream_message_count: Optional[int] = None
+    # If set, the final streamed assistant response must emit exactly this many bubbles.
+    expected_stream_message_count: Optional[int] = None
+    # If set, at least one streamed bubble must contain each substring.
+    stream_bubbles_must_contain: List[str] = Field(default_factory=list)
 
 
 class Scenario(BaseModel):

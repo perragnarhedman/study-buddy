@@ -1,0 +1,16 @@
+{
+  "scenario_id": "bllm-001",
+  "title": "Backend LLM: overview in Swedish should not force a task selection",
+  "language": "sv",
+  "constraints": { "max_turns": 1 },
+  "assignments": [
+    { "id": "a1", "title": "Matte: algebra", "courseName": "Math", "dueDate": "2026-02-10", "description": null, "estimatedMinutes": 30 },
+    { "id": "a2", "title": "Historia: andra världskriget", "courseName": "History", "dueDate": "2026-02-12", "description": null, "estimatedMinutes": 40 }
+  ],
+  "initial_user_message": "Vad har jag kvar att göra?",
+  "expected": {
+    "require_no_selection": true,
+    "expected_reply_language": "sv",
+    "max_question_marks": 2
+  }
+}

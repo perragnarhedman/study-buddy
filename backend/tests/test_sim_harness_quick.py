@@ -34,6 +34,16 @@ def test_sim_harness_integration_suite_loads() -> None:
     assert len(scenarios) >= 3
 
 
+def test_sim_harness_backend_llm_suite_loads() -> None:
+    scenarios = load_scenarios(suite="backend_llm")
+    assert len(scenarios) >= 3
+
+
+def test_sim_harness_backend_stream_suite_loads() -> None:
+    scenarios = load_scenarios(suite="backend_stream")
+    assert len(scenarios) >= 3
+
+
 def test_sim_harness_extended_suite_runs_in_mock_mode_without_enforcing_expectations(tmp_path) -> None:
     scenarios = load_scenarios(suite="extended")
     cfg = RunConfig(

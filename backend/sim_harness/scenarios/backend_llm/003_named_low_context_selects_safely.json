@@ -1,0 +1,15 @@
+{
+  "scenario_id": "bllm-003",
+  "title": "Backend LLM: named low-context assignment may select safely without hallucinating specifics",
+  "language": "en",
+  "constraints": { "max_turns": 1 },
+  "assignments": [
+    { "id": "a1", "title": "Essay", "courseName": "English", "dueDate": null, "description": null, "estimatedMinutes": null }
+  ],
+  "initial_user_message": "Help me start the English essay.",
+  "expected": {
+    "require_any_selection": true,
+    "expected_selected_assignment_id": "a1",
+    "assistant_text_forbidden_substrings": ["page", "pages", "chapter", "due tomorrow"]
+  }
+}

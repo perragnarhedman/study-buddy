@@ -32,6 +32,13 @@ def _parser() -> argparse.ArgumentParser:
     backend.add_argument("--max-turns", type=int, default=6)
     backend.add_argument("--output-dir", type=str, default="sim_runs")
     backend.add_argument(
+        "--suite",
+        type=str,
+        default="integration",
+        choices=["integration", "backend_llm", "backend_stream"],
+        help="Scenario suite for backend mode. Use backend_llm or backend_stream for conversational-rule checks with the real coach.",
+    )
+    backend.add_argument(
         "--use-openai-coach",
         action="store_true",
         help="Use real OpenAI coach (no patching). Requires OPENAI_API_KEY.",
@@ -85,6 +92,7 @@ async def _run_extended(args: argparse.Namespace) -> int:
 
 async def _run_backend(args: argparse.Namespace) -> int:
     out = await run_backend_integration_suite(
+        suite=str(args.suite),
         output_dir=str(args.output_dir),
         max_turns=int(args.max_turns),
         use_openai_coach=bool(args.use_openai_coach),

@@ -3,12 +3,17 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import re
 import time
 from typing import Any, Dict, List, Optional
 
 import httpx
 
-from sim_harness.backend_sut import prepare_backend_env, run_backend_inprocess_turn
+from sim_harness.backend_sut import (
+    prepare_backend_env,
+    run_backend_inprocess_stream_turn,
+    run_backend_inprocess_turn,
+)
 from sim_harness.evals import aggregate_suite
 from sim_harness.models import Scenario
 from sim_harness.scenarios import load_scenarios
@@ -23,6 +28,19 @@ def _is_ack(text: str) -> bool:
 def _is_completion(text: str) -> bool:
     t = (text or "").lower()
     return any(k in t for k in ["i finished", "finished", "done", "completed", "submitted", "klar", "färdig", "fardig"])
+
+
+def _detect_lang_hint(text: str) -> Optional[str]:
+    s = (text or "").strip()
+    if not s:
+        return None
+    s2 = s.lower()
+    if any(ch in s2 for ch in "åäö"):
+        return "sv"
+    words = re.sub(r"[^a-zåäö]+", " ", s2).split()
+    if any(w in words for w in ["hej", "tack", "okej", "klar", "färdig", "engelska", "idag", "vad", "jag"]):
+        return "sv"
+    return "en"
 
 
 async def _install_deterministic_coach() -> None:
@@ -75,14 +93,16 @@ async def _install_deterministic_coach() -> None:
 
 async def run_backend_integration_suite(
     *,
+    suite: str = "integration",
     output_dir: str = "sim_runs",
     max_turns: int = 6,
     use_openai_coach: bool = False,
     http_base_url: Optional[str] = None,
     session_token: Optional[str] = None,
 ) -> Dict[str, Any]:
-    scenarios = load_scenarios(suite="integration")
+    scenarios = load_scenarios(suite=suite)
     results: List[Dict[str, Any]] = []
+    use_stream_endpoint = suite == "backend_stream"
 
     for sc in scenarios:
         tw = TraceWriter.create(output_dir=output_dir, scenario_id=sc.scenario_id)
@@ -119,6 +139,7 @@ async def run_backend_integration_suite(
                 "scenario_id": sc.scenario_id,
                 "scenario_title": sc.title,
                 "sut": "backend_http" if http_base_url else "backend_inprocess",
+                "transport": "send_stream" if use_stream_endpoint else "send",
                 "use_openai_coach": use_openai_coach,
             }
         )
@@ -131,9 +152,16 @@ async def run_backend_integration_suite(
             user_msg = sc.initial_user_message
 
         selected_any = False
+        selected_by_turn: Dict[int, Optional[str]] = {}
+        mark_done_by_turn: Dict[int, List[str]] = {}
+        assistant_text_by_turn: Dict[int, str] = {}
+        reply_language_by_turn: Dict[int, Optional[str]] = {}
         last_selected: Optional[str] = None
         failures: List[str] = []
         last_marked_done: List[str] = []
+        last_reply_language: Optional[str] = None
+        last_assistant_text: str = ""
+        last_assistant_bubbles: List[str] = []
 
         if http_base_url and not session_token:
             failures.append("missing_session_token_for_http_mode")
@@ -169,20 +197,31 @@ async def run_backend_integration_suite(
             for turn_idx in range(max_turns):
                 tw.write_event({"type": "turn_user", "turn_idx": turn_idx, "text": redact_for_trace(user_msg)})
 
-                out = await run_backend_inprocess_turn(
-                    client=client,
-                    token=token,
-                    user_message=user_msg,
-                    assignments=sc.assignments,
-                    do_reset=(turn_idx == 0),
-                    user_id=user_id,
-                )
+                if use_stream_endpoint:
+                    out = await run_backend_inprocess_stream_turn(
+                        client=client,
+                        token=token,
+                        user_message=user_msg,
+                        assignments=sc.assignments,
+                        do_reset=(turn_idx == 0),
+                        user_id=user_id,
+                    )
+                else:
+                    out = await run_backend_inprocess_turn(
+                        client=client,
+                        token=token,
+                        user_message=user_msg,
+                        assignments=sc.assignments,
+                        do_reset=(turn_idx == 0),
+                        user_id=user_id,
+                    )
 
                 tw.write_event(
                     {
                         "type": "turn_backend",
                         "turn_idx": turn_idx,
                         "assistant_text": redact_for_trace(out.assistant_text),
+                        "assistant_bubbles": [redact_for_trace(t, max_chars=1000) for t in out.assistant_bubbles],
                         "selected_assignment_id": out.selected_assignment_id,
                         "marked_done_assignment_ids": out.marked_done_assignment_ids,
                         "raw_response": redact_for_trace(json.dumps(out.raw_response_json, ensure_ascii=False), max_chars=6000),
@@ -192,7 +231,14 @@ async def run_backend_integration_suite(
                 if out.selected_assignment_id:
                     selected_any = True
                     last_selected = out.selected_assignment_id
+                selected_by_turn[turn_idx] = out.selected_assignment_id
                 last_marked_done = out.marked_done_assignment_ids
+                mark_done_by_turn[turn_idx] = list(out.marked_done_assignment_ids)
+                last_assistant_text = out.assistant_text
+                last_assistant_bubbles = list(out.assistant_bubbles)
+                assistant_text_by_turn[turn_idx] = last_assistant_text
+                last_reply_language = _detect_lang_hint(out.assistant_text)
+                reply_language_by_turn[turn_idx] = last_reply_language
 
                 # Next user message
                 if script:
@@ -205,10 +251,55 @@ async def run_backend_integration_suite(
             failures.append("expected_selection_missing")
         if sc.expected.require_no_selection and selected_any:
             failures.append("expected_no_selection_but_got_selection")
-        if sc.expected.expected_selected_assignment_id and last_selected != sc.expected.expected_selected_assignment_id:
-            failures.append("expected_selected_assignment_id_mismatch")
-        if sc.expected.expected_mark_done_assignment_id and sc.expected.expected_mark_done_assignment_id not in set(last_marked_done):
-            failures.append("expected_mark_done_assignment_id_mismatch")
+        if sc.expected.expected_selected_assignment_id:
+            turn = sc.expected.expected_selected_assignment_id_turn
+            if isinstance(turn, int):
+                got = selected_by_turn.get(turn)
+                if got != sc.expected.expected_selected_assignment_id:
+                    failures.append("expected_selected_assignment_id_mismatch")
+            elif last_selected != sc.expected.expected_selected_assignment_id:
+                failures.append("expected_selected_assignment_id_mismatch")
+        if sc.expected.forbidden_selected_assignment_ids:
+            forbidden = set(sc.expected.forbidden_selected_assignment_ids)
+            for sid in selected_by_turn.values():
+                if sid and sid in forbidden:
+                    failures.append("selected_assignment_id_forbidden")
+                    break
+        if sc.expected.expected_mark_done_assignment_id:
+            turn = sc.expected.expected_mark_done_assignment_id_turn
+            if isinstance(turn, int):
+                got = mark_done_by_turn.get(turn, [])
+                if sc.expected.expected_mark_done_assignment_id not in set(got):
+                    failures.append("expected_mark_done_assignment_id_mismatch")
+            elif sc.expected.expected_mark_done_assignment_id not in set(last_marked_done):
+                failures.append("expected_mark_done_assignment_id_mismatch")
+        if sc.expected.expected_reply_language and last_reply_language != sc.expected.expected_reply_language:
+            failures.append("expected_reply_language_mismatch")
+        if sc.expected.assistant_text_must_contain:
+            for s in sc.expected.assistant_text_must_contain:
+                if s and s not in last_assistant_text:
+                    failures.append("assistant_text_missing_expected_substring")
+                    break
+        if sc.expected.assistant_text_forbidden_substrings:
+            for s in sc.expected.assistant_text_forbidden_substrings:
+                if s and s in last_assistant_text:
+                    failures.append("assistant_text_contains_forbidden_substring")
+                    break
+        if sc.expected.max_question_marks is not None:
+            qm = last_assistant_text.count("?")
+            if qm > int(sc.expected.max_question_marks):
+                failures.append("assistant_text_too_many_questions")
+        if sc.expected.min_stream_message_count is not None:
+            if len(last_assistant_bubbles) < int(sc.expected.min_stream_message_count):
+                failures.append("stream_message_count_below_minimum")
+        if sc.expected.expected_stream_message_count is not None:
+            if len(last_assistant_bubbles) != int(sc.expected.expected_stream_message_count):
+                failures.append("stream_message_count_mismatch")
+        if sc.expected.stream_bubbles_must_contain:
+            for s in sc.expected.stream_bubbles_must_contain:
+                if s and not any(s in bubble for bubble in last_assistant_bubbles):
+                    failures.append("stream_bubbles_missing_expected_substring")
+                    break
 
         ok = len(failures) == 0
         tw.write_summary(

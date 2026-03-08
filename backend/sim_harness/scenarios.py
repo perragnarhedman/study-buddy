@@ -15,6 +15,8 @@ _SUITE_DIR = {
     "quick": "golden",
     "extended": "extended",
     "integration": "integration",
+    "backend_llm": "backend_llm",
+    "backend_stream": "backend_stream",
 }
 
 
