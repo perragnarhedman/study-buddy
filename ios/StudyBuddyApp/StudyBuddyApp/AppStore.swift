@@ -87,7 +87,11 @@ final class AppStore: ObservableObject {
             return
         }
         do {
-            try await api.resetConversation(sessionToken: sessionToken)
+            try await api.resetConversation(
+                sessionToken: sessionToken,
+                clearAssignmentStatus: false,
+                clearPreferences: false
+            )
             messages = []
             bestNextActionFromChat = nil
             chatErrorMessage = nil
@@ -303,7 +307,7 @@ final class AppStore: ObservableObject {
         let normalized = text.replacingOccurrences(of: "\r\n", with: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
         guard !normalized.isEmpty else { return [] }
 
-        var parts = normalized
+        let parts = normalized
             .components(separatedBy: "\n\n")
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }

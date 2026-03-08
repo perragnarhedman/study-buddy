@@ -20,6 +20,16 @@ protocol ChatAPIClient {
     func fetchClassroomAssignments(sessionToken: String) async throws -> [Assignment]
 }
 
+extension ChatAPIClient {
+    func resetConversation(sessionToken: String?) async throws {
+        try await resetConversation(
+            sessionToken: sessionToken,
+            clearAssignmentStatus: false,
+            clearPreferences: false
+        )
+    }
+}
+
 final class APIClient: ChatAPIClient {
     var baseURLString: String
 
@@ -70,9 +80,7 @@ final class APIClient: ChatAPIClient {
 
     func sendChatStream(userMessage: String, sessionToken: String?) -> AsyncThrowingStream<ChatStreamEvent, Error> {
         AsyncThrowingStream { continuation in
-            var task: Task<Void, Never>?
-
-            task = Task {
+            let task = Task {
                 do {
                     let u = try self.url("chat/send_stream")
                     var req = URLRequest(url: u)
@@ -106,8 +114,8 @@ final class APIClient: ChatAPIClient {
                 }
             }
 
-            continuation.onTermination = { _ in
-                task?.cancel()
+            continuation.onTermination = { [task] _ in
+                task.cancel()
             }
         }
     }
