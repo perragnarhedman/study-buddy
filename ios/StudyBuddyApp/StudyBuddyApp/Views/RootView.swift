@@ -6,7 +6,9 @@ struct RootView: View {
 
     var body: some View {
         NavigationStack {
-            ChatView()
+            ChatView {
+                showingSettings = true
+            }
                 .navigationTitle("Chat")
                 .toolbar {
                     ToolbarItem(placement: .topBarTrailing) {

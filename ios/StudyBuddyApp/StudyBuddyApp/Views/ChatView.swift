@@ -3,6 +3,7 @@ import SwiftUI
 struct ChatView: View {
     @EnvironmentObject private var store: AppStore
     @State private var draft: String = ""
+    let onOpenSettings: () -> Void
 
     var body: some View {
         VStack(spacing: 0) {
@@ -28,7 +29,7 @@ struct ChatView: View {
                     .padding(.vertical, 8)
             }
             if store.isIntroMode {
-                Text("Sign in from Settings to connect Google Classroom.")
+                Text("Welcome. Ask what Study Buddy can do, then use the Sign in button below when you're ready.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
                     .padding(.horizontal, 12)
@@ -36,6 +37,9 @@ struct ChatView: View {
             }
             messagesList
             Divider()
+            if store.isIntroMode {
+                signInBar
+            }
             inputBar
         }
         .background(Color(.systemGroupedBackground))
@@ -120,6 +124,27 @@ struct ChatView: View {
             .disabled(draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
         }
         .padding(12)
+        .background(Color(.systemBackground))
+    }
+
+    private var signInBar: some View {
+        HStack {
+            Button {
+                onOpenSettings()
+            } label: {
+                Text("Sign in")
+                    .fontWeight(.semibold)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 12)
+                    .background(Color.accentColor.opacity(0.12))
+                    .foregroundStyle(Color.accentColor)
+                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            }
+            .accessibilityLabel("Sign in from Settings")
+        }
+        .padding(.horizontal, 12)
+        .padding(.top, 12)
+        .padding(.bottom, 4)
         .background(Color(.systemBackground))
     }
 }

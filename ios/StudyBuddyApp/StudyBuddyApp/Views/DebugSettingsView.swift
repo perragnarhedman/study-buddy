@@ -82,6 +82,15 @@ struct DebugSettingsView: View {
                     }
                 }
 
+                if store.isSignedIn {
+                    Section("Account") {
+                        Button("Sign out", role: .destructive) {
+                            store.signOut()
+                            dismiss()
+                        }
+                    }
+                }
+
                 Section("Tips") {
                     Text("If sign-in fails, confirm the app is pointing at a reachable backend URL.")
                         .font(.footnote)

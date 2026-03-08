@@ -191,13 +191,70 @@ final class AppStoreChatStreamingTests: XCTestCase {
         )
         store.useStubData = false
 
-        XCTAssertEqual(store.messages.first?.role, .assistant)
-        XCTAssertTrue(store.messages.first?.text.contains("Connect Google Classroom") ?? false)
+        XCTAssertEqual(store.messages.map(\.role), [.assistant, .assistant])
+        XCTAssertTrue(store.messages.first?.text.contains("Hello") ?? false)
+        XCTAssertTrue(store.messages.first?.text.contains("Bonjour") ?? false)
+        XCTAssertTrue(store.messages.first?.text.contains("Hola") ?? false)
+        XCTAssertEqual(
+            store.messages.last?.text,
+            "Study Buddy helps you understand what to work on and get started with schoolwork."
+        )
 
         await store.sendUserMessage("What can you help with?")
 
         XCTAssertEqual(api.sendChatStreamCalls.map(\.chatMode), [.intro])
         XCTAssertEqual(api.sendChatStreamCalls.map(\.visibleChatIsEmpty), [true])
+    }
+
+    func testSignOutReturnsSignedInStoreToIntroWelcome() {
+        let store = AppStore(
+            apiClientFactory: { _ in MockChatAPIClient() },
+            sessionTokenProvider: { "token" }
+        )
+        store.useStubData = false
+        store.messages = [
+            ChatMessage(id: "u1", role: .user, text: "Help me", timestamp: "t")
+        ]
+        store.classroomAssignmentsImported = 3
+        store.classroomAssignments = [
+            Assignment(
+                id: "a1",
+                title: "Essay",
+                dueDate: nil,
+                courseName: "English",
+                description: nil,
+                url: nil,
+                estimatedMinutes: nil,
+                attachments: nil
+            )
+        ]
+
+        store.signOut()
+
+        XCTAssertFalse(store.isSignedIn)
+        XCTAssertNil(store.classroomAssignmentsImported)
+        XCTAssertTrue(store.classroomAssignments.isEmpty)
+        XCTAssertEqual(store.messages.map(\.role), [.assistant, .assistant])
+        XCTAssertTrue(store.messages.first?.text.contains("Hello") ?? false)
+        XCTAssertEqual(
+            store.messages.last?.text,
+            "Study Buddy helps you understand what to work on and get started with schoolwork."
+        )
+    }
+
+    func testSaveSessionTokenShowsSignedInWelcomeMessage() {
+        let store = AppStore(
+            apiClientFactory: { _ in MockChatAPIClient() },
+            sessionTokenProvider: { nil }
+        )
+        store.useStubData = false
+
+        store.saveSessionToken("fresh-token")
+
+        XCTAssertTrue(store.isSignedIn)
+        XCTAssertEqual(store.messages.count, 1)
+        XCTAssertEqual(store.messages.first?.role, .assistant)
+        XCTAssertEqual(store.messages.first?.text, "Welcome. I'm ready to help with your schoolwork.")
     }
 }
 

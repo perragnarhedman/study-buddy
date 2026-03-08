@@ -17,9 +17,9 @@ final class AppStore: ObservableObject {
     @Published private(set) var isSignedIn: Bool
 
     private let sessionTokenKey = "studybuddy.sessionToken"
-    private static let introWelcomeMessageID = "intro-welcome"
-    private static let introWelcomeMessageText =
-        "Hi! I'm Study Buddy.\n\nI can explain what Study Buddy is, share a few examples of how it helps with schoolwork, and show you how to sign in when you're ready.\n\nTo use your own assignments, open Settings and choose Connect Google Classroom."
+    private static let introGreetingMessageID = "intro-welcome-greeting"
+    private static let introSummaryMessageID = "intro-welcome-summary"
+    private static let signedInWelcomeMessageID = "signed-in-welcome"
     private let apiClientFactory: (String) -> ChatAPIClient
     private let sessionTokenProvider: () -> String?
     private var coalescedStreamMessageIDs: Set<String> = []
@@ -86,18 +86,61 @@ final class AppStore: ObservableObject {
 
     private var api: ChatAPIClient { apiClientFactory(baseURL) }
 
-    private var hasOnlyIntroWelcomeMessage: Bool {
-        messages.count == 1 && messages[0].id == Self.introWelcomeMessageID && messages[0].role == .assistant
+    private var hasOnlyIntroWelcomeMessages: Bool {
+        guard messages.count == 2 else { return false }
+        let expectedIDs: Set<String> = [Self.introGreetingMessageID, Self.introSummaryMessageID]
+        let actualIDs = Set(messages.map(\.id))
+        return actualIDs == expectedIDs && messages.allSatisfy { $0.role == .assistant }
     }
 
-    private func seedIntroConversationIfNeeded() {
+    private static func localizedIntroGreeting() -> String {
+        let languageCode = Locale.current.language.languageCode?.identifier.lowercased() ?? "en"
+        let primaryGreeting: String
+        switch languageCode {
+        case "sv":
+            primaryGreeting = "Hej"
+        case "fr":
+            primaryGreeting = "Bonjour"
+        case "es":
+            primaryGreeting = "Hola"
+        default:
+            primaryGreeting = "Hello"
+        }
+
+        let greetings = [primaryGreeting, "Hello", "Bonjour", "Hola"]
+        var ordered: [String] = []
+        for greeting in greetings where !ordered.contains(greeting) {
+            ordered.append(greeting)
+        }
+        return ordered.joined(separator: " • ")
+    }
+
+    private func seedIntroConversationIfNeeded(forceReset: Bool = false) {
         guard isIntroMode else { return }
-        guard messages.isEmpty else { return }
+        guard forceReset || messages.isEmpty else { return }
         messages = [
             ChatMessage(
-                id: Self.introWelcomeMessageID,
+                id: Self.introGreetingMessageID,
                 role: .assistant,
-                text: Self.introWelcomeMessageText,
+                text: Self.localizedIntroGreeting(),
+                timestamp: Self.isoNow()
+            ),
+            ChatMessage(
+                id: Self.introSummaryMessageID,
+                role: .assistant,
+                text: "Study Buddy helps you understand what to work on and get started with schoolwork.",
+                timestamp: Self.isoNow()
+            )
+        ]
+    }
+
+    private func seedSignedInWelcomeMessage() {
+        guard isSignedIn else { return }
+        messages = [
+            ChatMessage(
+                id: Self.signedInWelcomeMessageID,
+                role: .assistant,
+                text: "Welcome. I'm ready to help with your schoolwork.",
                 timestamp: Self.isoNow()
             )
         ]
@@ -142,6 +185,21 @@ final class AppStore: ObservableObject {
         chatInfoMessage = nil
         authErrorMessage = nil
         isAssistantTyping = false
+        seedSignedInWelcomeMessage()
+    }
+
+    func signOut() {
+        Keychain.deleteValue(forKey: sessionTokenKey)
+        isSignedIn = false
+        classroomAssignmentsImported = nil
+        classroomAssignments = []
+        messages = []
+        bestNextActionFromChat = nil
+        chatErrorMessage = nil
+        chatInfoMessage = nil
+        authErrorMessage = nil
+        isAssistantTyping = false
+        seedIntroConversationIfNeeded(forceReset: true)
     }
 
     func refreshClassroomAssignmentsImportedCount() async {
@@ -174,7 +232,7 @@ final class AppStore: ObservableObject {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
         let activeChatMode = chatMode
-        let visibleChatWasEmpty = messages.isEmpty || (activeChatMode == .intro && hasOnlyIntroWelcomeMessage)
+        let visibleChatWasEmpty = messages.isEmpty || (activeChatMode == .intro && hasOnlyIntroWelcomeMessages)
 
         let userMsg = ChatMessage(
             id: UUID().uuidString,
