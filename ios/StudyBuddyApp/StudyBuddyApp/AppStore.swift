@@ -16,9 +16,16 @@ final class AppStore: ObservableObject {
     @Published var isAssistantTyping: Bool = false
 
     private let sessionTokenKey = "studybuddy.sessionToken"
-    var sessionToken: String? { Keychain.getString(forKey: sessionTokenKey) }
+    private let apiClientFactory: (String) -> ChatAPIClient
+    private let sessionTokenProvider: () -> String?
+    var sessionToken: String? { sessionTokenProvider() }
 
-    init() {
+    init(
+        apiClientFactory: @escaping (String) -> ChatAPIClient = { APIClient(baseURLString: $0) },
+        sessionTokenProvider: @escaping () -> String? = { Keychain.getString(forKey: "studybuddy.sessionToken") }
+    ) {
+        self.apiClientFactory = apiClientFactory
+        self.sessionTokenProvider = sessionTokenProvider
         // If an older build saved a localhost baseURL, move it to the current default.
         // This makes upgrades (and simulator reinstalls) behave consistently.
         migrateSavedDefaultsIfNeeded()
@@ -68,7 +75,7 @@ final class AppStore: ObservableObject {
         return classroomAssignments.first(where: { $0.id == id })?.courseName
     }
 
-    private var api: APIClient { APIClient(baseURLString: baseURL) }
+    private var api: ChatAPIClient { apiClientFactory(baseURL) }
 
     func resetConversation() async {
         guard !useStubData else {

@@ -9,7 +9,18 @@ enum APIError: Error {
     case unauthorized
 }
 
-final class APIClient {
+protocol ChatAPIClient {
+    func sendChat(userMessage: String, sessionToken: String?) async throws -> ChatSendResponse
+    func sendChatStream(userMessage: String, sessionToken: String?) -> AsyncThrowingStream<ChatStreamEvent, Error>
+    func resetConversation(
+        sessionToken: String?,
+        clearAssignmentStatus: Bool,
+        clearPreferences: Bool
+    ) async throws
+    func fetchClassroomAssignments(sessionToken: String) async throws -> [Assignment]
+}
+
+final class APIClient: ChatAPIClient {
     var baseURLString: String
 
     init(baseURLString: String) {

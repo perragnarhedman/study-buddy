@@ -18,7 +18,19 @@
 		11111111111111111111111A /* Preview Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 222222222222222222222231 /* Preview Assets.xcassets */; };
 		11111111111111111111111B /* Keychain.swift in Sources */ = {isa = PBXBuildFile; fileRef = 222222222222222222222232 /* Keychain.swift */; };
 		11111111111111111111111C /* DueDateDisplay.swift in Sources */ = {isa = PBXBuildFile; fileRef = 222222222222222222222233 /* DueDateDisplay.swift */; };
+		333333333333333333333331 /* AppStoreChatStreamingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 333333333333333333333322 /* AppStoreChatStreamingTests.swift */; };
+		333333333333333333333332 /* XCTest.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 333333333333333333333323 /* XCTest.framework */; };
 /* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		333333333333333333333341 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 888888888888888888888888 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 555555555555555555555555;
+			remoteInfo = StudyBuddyApp;
+		};
+/* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
 		222222222222222222222220 /* StudyBuddyApp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = StudyBuddyApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -34,13 +46,28 @@
 		222222222222222222222231 /* Preview Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = "Preview Assets.xcassets"; sourceTree = "<group>"; };
 		222222222222222222222232 /* Keychain.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Keychain.swift; sourceTree = "<group>"; };
 		222222222222222222222233 /* DueDateDisplay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DueDateDisplay.swift; sourceTree = "<group>"; };
+		333333333333333333333321 /* StudyBuddyAppTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = StudyBuddyAppTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		333333333333333333333322 /* AppStoreChatStreamingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppStoreChatStreamingTests.swift; sourceTree = "<group>"; };
+		333333333333333333333323 /* XCTest.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = XCTest.framework; path = System/Library/Frameworks/XCTest.framework; sourceTree = SDKROOT; };
 /* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		777777777777777777777774 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				333333333333333333333332 /* XCTest.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
 		444444444444444444444440 = {
 			isa = PBXGroup;
 			children = (
 				444444444444444444444441 /* StudyBuddyApp */,
+				44444444444444444444444B /* StudyBuddyAppTests */,
 				444444444444444444444449 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -84,8 +111,17 @@
 			isa = PBXGroup;
 			children = (
 				222222222222222222222220 /* StudyBuddyApp.app */,
+				333333333333333333333321 /* StudyBuddyAppTests.xctest */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		44444444444444444444444B /* StudyBuddyAppTests */ = {
+			isa = PBXGroup;
+			children = (
+				333333333333333333333322 /* AppStoreChatStreamingTests.swift */,
+			);
+			path = StudyBuddyAppTests;
 			sourceTree = "<group>";
 		};
 		44444444444444444444444A /* Utils */ = {
@@ -115,6 +151,24 @@
 			productReference = 222222222222222222222220 /* StudyBuddyApp.app */;
 			productType = "com.apple.product-type.application";
 		};
+		555555555555555555555556 /* StudyBuddyAppTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 666666666666666666666667 /* Build configuration list for PBXNativeTarget "StudyBuddyAppTests" */;
+			buildPhases = (
+				777777777777777777777774 /* Frameworks */,
+				777777777777777777777775 /* Sources */,
+				777777777777777777777776 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				333333333333333333333351 /* PBXTargetDependency */,
+			);
+			name = StudyBuddyAppTests;
+			productName = StudyBuddyAppTests;
+			productReference = 333333333333333333333321 /* StudyBuddyAppTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -127,6 +181,10 @@
 				TargetAttributes = {
 					555555555555555555555555 = {
 						CreatedOnToolsVersion = 15.0;
+					};
+					555555555555555555555556 = {
+						CreatedOnToolsVersion = 15.0;
+						TestTargetID = 555555555555555555555555;
 					};
 				};
 			};
@@ -144,6 +202,7 @@
 			projectRoot = "";
 			targets = (
 				555555555555555555555555 /* StudyBuddyApp */,
+				555555555555555555555556 /* StudyBuddyAppTests */,
 			);
 		};
 /* End PBXProject section */
@@ -155,6 +214,13 @@
 			files = (
 				111111111111111111111119 /* Assets.xcassets in Resources */,
 				11111111111111111111111A /* Preview Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		777777777777777777777776 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -177,7 +243,23 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		777777777777777777777775 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				333333333333333333333331 /* AppStoreChatStreamingTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		333333333333333333333351 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 555555555555555555555555 /* StudyBuddyApp */;
+			targetProxy = 333333333333333333333341 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		999999999999999999999991 /* Debug */ = {
@@ -252,6 +334,60 @@
 			};
 			name = Release;
 		};
+		999999999999999999999995 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CLANG_ENABLE_MODULES = YES;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 8MRM9JY95Z;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = io.studybuddy.app.tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				PRODUCT_BUNDLE_PACKAGE_TYPE = BNDL;
+				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/StudyBuddyApp.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/StudyBuddyApp";
+			};
+			name = Debug;
+		};
+		999999999999999999999996 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CLANG_ENABLE_MODULES = YES;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 8MRM9JY95Z;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = io.studybuddy.app.tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				PRODUCT_BUNDLE_PACKAGE_TYPE = BNDL;
+				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/StudyBuddyApp.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/StudyBuddyApp";
+			};
+			name = Release;
+		};
 		999999999999999999999993 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -285,6 +421,15 @@
 			buildConfigurations = (
 				999999999999999999999991 /* Debug */,
 				999999999999999999999992 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		666666666666666666666667 /* Build configuration list for PBXNativeTarget "StudyBuddyAppTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				999999999999999999999995 /* Debug */,
+				999999999999999999999996 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;
