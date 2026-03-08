@@ -90,7 +90,11 @@ async def run_backend_inprocess_turn(
     Execute a single /chat/send turn against an in-process FastAPI app via httpx.
     This exercises the real route + SQLite persistence.
     """
-    headers = {"Authorization": f"Bearer {token}"}
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "X-Client-Channel": "sim_harness",
+        "X-Client-Platform": "backend",
+    }
 
     if do_reset:
         qs = []
@@ -148,7 +152,11 @@ async def run_backend_inprocess_stream_turn(
     """
     Execute a single /chat/send_stream turn and collect streamed bubble events.
     """
-    headers = {"Authorization": f"Bearer {token}"}
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "X-Client-Channel": "sim_harness",
+        "X-Client-Platform": "backend",
+    }
 
     if do_reset:
         qs = []

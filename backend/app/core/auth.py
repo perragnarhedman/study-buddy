@@ -12,6 +12,7 @@ from app.core.config import get_settings
 @dataclass(frozen=True)
 class AuthContext:
     user_id: str
+    export_source: Optional[dict[str, str]] = None
 
 
 def _serializer() -> URLSafeTimedSerializer:

@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from typing import Any, Optional
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 from pydantic import ValidationError
 
@@ -22,6 +22,7 @@ from app.core.db import (
     persist_chat_turn,
     reset_conversation_state,
 )
+from app.core.logging import get_request_id
 from app.models.agent import CoachDecision
 from app.models.schemas import ChatMessage, ChatSendRequest, ChatSendResponse, PlanItem, iso_now, new_id
 from app.services.assignment_source import select_assignments
@@ -60,6 +61,7 @@ class PreparedChatContext:
     conversation_summary: str
     user_state_obj: dict[str, Any]
     user_state_json: str
+    export_source: dict[str, Any]
 
 def _sanitize_user_only_summary(summary: str) -> str:
     """
@@ -221,7 +223,12 @@ def _detect_lang_hint(s: str) -> str:
     return "en"
 
 
-async def _prepare_chat_context(payload: ChatSendRequest, *, user_id: str) -> PreparedChatContext:
+async def _prepare_chat_context(
+    payload: ChatSendRequest,
+    *,
+    user_id: str,
+    export_source: dict[str, Any],
+) -> PreparedChatContext:
     user_text = (payload.user_message or "").strip()
     if not user_text:
         logger.warning("chat_send_400 user_message_required user_id=%s", user_id)
@@ -324,7 +331,94 @@ async def _prepare_chat_context(payload: ChatSendRequest, *, user_id: str) -> Pr
         conversation_summary=conversation_summary,
         user_state_obj=user_state_obj,
         user_state_json=user_state_json,
+        export_source=export_source,
     )
+
+
+def _compact_dict(data: dict[str, Any]) -> dict[str, Any]:
+    out: dict[str, Any] = {}
+    for key, value in data.items():
+        if value is None or value == "" or value == "-":
+            continue
+        out[key] = value
+    return out
+
+
+def _build_export_source(
+    *,
+    request: Optional[Request],
+    ctx: AuthContext,
+    route_path: str,
+    transport: str,
+    client_channel: str | None,
+    client_platform: str | None,
+    app_version: str | None,
+    app_build: str | None,
+) -> dict[str, Any]:
+    inherited = dict(ctx.export_source or {})
+    return _compact_dict(
+        {
+            "channel": client_channel or inherited.get("channel") or "api",
+            "platform": client_platform or inherited.get("platform"),
+            "app_version": app_version or inherited.get("app_version"),
+            "build": app_build or inherited.get("build"),
+            "route": route_path if request is not None else inherited.get("route", route_path),
+            "transport": transport if request is not None else inherited.get("transport", transport),
+            "request_id": get_request_id(),
+        }
+    )
+
+
+def _build_debug_export_payload(
+    *,
+    prepared: PreparedChatContext,
+    attempts: list[dict[str, Any]],
+    assistant_text: str,
+    best_next_action_id: str | None,
+    selected_assignment_id: str | None,
+    mark_done_assignment_id: str | None,
+) -> dict[str, Any]:
+    legacy_payload = {
+        "user_message": prepared.user_text,
+        "lang_hint": prepared.lang_hint,
+        "conversation_history": prepared.conversation_history,
+        "conversation_summary": prepared.conversation_summary,
+        "user_state_json": prepared.user_state_json,
+        "candidates": prepared.candidates,
+        "attempts": attempts,
+        "response": {
+            "assistant_text": assistant_text,
+            "best_next_action_id": best_next_action_id,
+            "selected_assignment_id": selected_assignment_id,
+            "mark_done_assignment_id": mark_done_assignment_id,
+        },
+    }
+
+    return {
+        "source": prepared.export_source,
+        "request": {
+            "user_message": prepared.user_text,
+            "lang_hint": prepared.lang_hint,
+            "acknowledgement_message": prepared.ack,
+        },
+        "context": {
+            "conversation_history": prepared.conversation_history,
+            "conversation_summary": prepared.conversation_summary,
+            "user_state": prepared.user_state_obj,
+            "candidates": prepared.candidates,
+            "last_selected_assignment_id": prepared.last_selected_assignment_id,
+            "last_selected_plan_item_id": prepared.last_selected_plan_item_id,
+        },
+        "model": {"attempts": attempts},
+        "response": {
+            "assistant_text": assistant_text,
+            "best_next_action_id": best_next_action_id,
+            "selected_assignment_id": selected_assignment_id,
+            "mark_done_assignment_id": mark_done_assignment_id,
+        },
+        # Temporary duplicate during rollout so existing workflows can keep using payload.
+        "payload": legacy_payload,
+    }
 
 
 def _candidate_ids(prepared: PreparedChatContext) -> set[str]:
@@ -508,18 +602,14 @@ def _build_chat_response(
         _attach_decision_metadata(attempts, decision)
         export_chat_trace(
             user_id=prepared.user_id,
-            payload={
-                "user_message": prepared.user_text,
-                "lang_hint": prepared.lang_hint,
-                "conversation_history": prepared.conversation_history,
-                "user_state_json": prepared.user_state_json,
-                "candidates": prepared.candidates,
-                "attempts": attempts,
-                "response": {
-                    "assistant_text": text,
-                    "best_next_action_id": best_next_action.id if best_next_action else None,
-                },
-            },
+            payload=_build_debug_export_payload(
+                prepared=prepared,
+                attempts=attempts,
+                assistant_text=text,
+                best_next_action_id=(best_next_action.id if best_next_action else None),
+                selected_assignment_id=selected_assignment_id,
+                mark_done_assignment_id=mark_done_assignment_id,
+            ),
         )
     except Exception:
         pass
@@ -536,10 +626,50 @@ def _stream_event(payload: dict[str, Any]) -> str:
 
 @router.post("/chat/send", response_model=ChatSendResponse)
 async def chat_send(
-    payload: ChatSendRequest, ctx: AuthContext = Depends(require_user_id)
+    payload: ChatSendRequest,
+    request: Request,
+    x_client_channel: Optional[str] = Header(default=None, alias="X-Client-Channel"),
+    x_client_platform: Optional[str] = Header(default=None, alias="X-Client-Platform"),
+    x_app_version: Optional[str] = Header(default=None, alias="X-App-Version"),
+    x_app_build: Optional[str] = Header(default=None, alias="X-App-Build"),
+    ctx: AuthContext = Depends(require_user_id),
+) -> ChatSendResponse:
+    return await _chat_send_impl(
+        payload,
+        ctx=ctx,
+        request=request,
+        client_channel=x_client_channel,
+        client_platform=x_client_platform,
+        app_version=x_app_version,
+        app_build=x_app_build,
+    )
+
+
+async def _chat_send_impl(
+    payload: ChatSendRequest,
+    *,
+    ctx: AuthContext,
+    request: Optional[Request],
+    client_channel: Optional[str],
+    client_platform: Optional[str],
+    app_version: Optional[str],
+    app_build: Optional[str],
 ) -> ChatSendResponse:
     _require_openai()
-    prepared = await _prepare_chat_context(payload, user_id=ctx.user_id)
+    prepared = await _prepare_chat_context(
+        payload,
+        user_id=ctx.user_id,
+        export_source=_build_export_source(
+            request=request,
+            ctx=ctx,
+            route_path="/chat/send",
+            transport="http",
+            client_channel=client_channel,
+            client_platform=client_platform,
+            app_version=app_version,
+            app_build=app_build,
+        ),
+    )
 
     async def _call_coach(extra_note: str = ""):
         attempt = _attempt_entry(prepared, extra_note=extra_note)
@@ -602,10 +732,29 @@ async def chat_send(
 
 @router.post("/chat/send_stream")
 async def chat_send_stream(
-    payload: ChatSendRequest, ctx: AuthContext = Depends(require_user_id)
+    payload: ChatSendRequest,
+    request: Request,
+    x_client_channel: Optional[str] = Header(default=None, alias="X-Client-Channel"),
+    x_client_platform: Optional[str] = Header(default=None, alias="X-Client-Platform"),
+    x_app_version: Optional[str] = Header(default=None, alias="X-App-Version"),
+    x_app_build: Optional[str] = Header(default=None, alias="X-App-Build"),
+    ctx: AuthContext = Depends(require_user_id),
 ) -> StreamingResponse:
     _require_openai()
-    prepared = await _prepare_chat_context(payload, user_id=ctx.user_id)
+    prepared = await _prepare_chat_context(
+        payload,
+        user_id=ctx.user_id,
+        export_source=_build_export_source(
+            request=request,
+            ctx=ctx,
+            route_path="/chat/send_stream",
+            transport="stream",
+            client_channel=x_client_channel,
+            client_platform=x_client_platform,
+            app_version=x_app_version,
+            app_build=x_app_build,
+        ),
+    )
 
     async def event_stream():
         attempts: list[dict[str, Any]] = []

@@ -42,6 +42,20 @@ final class APIClient: ChatAPIClient {
         return base.appendingPathComponent(path)
     }
 
+    private func addClientMetadataHeaders(to req: inout URLRequest) {
+        req.setValue("ios_app", forHTTPHeaderField: "X-Client-Channel")
+        req.setValue("ios", forHTTPHeaderField: "X-Client-Platform")
+
+        if let appVersion = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String,
+           !appVersion.isEmpty {
+            req.setValue(appVersion, forHTTPHeaderField: "X-App-Version")
+        }
+        if let build = Bundle.main.object(forInfoDictionaryKey: kCFBundleVersionKey as String) as? String,
+           !build.isEmpty {
+            req.setValue(build, forHTTPHeaderField: "X-App-Build")
+        }
+    }
+
     func health() async throws -> Bool {
         let u = try url("health")
         var req = URLRequest(url: u)
@@ -58,6 +72,7 @@ final class APIClient: ChatAPIClient {
         var req = URLRequest(url: u)
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        addClientMetadataHeaders(to: &req)
         if let token = sessionToken, !token.isEmpty {
             req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         }
@@ -86,6 +101,7 @@ final class APIClient: ChatAPIClient {
                     var req = URLRequest(url: u)
                     req.httpMethod = "POST"
                     req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+                    self.addClientMetadataHeaders(to: &req)
                     if let token = sessionToken, !token.isEmpty {
                         req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
                     }

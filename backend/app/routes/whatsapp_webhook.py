@@ -150,7 +150,17 @@ async def whatsapp_webhook(request: Request) -> dict:
     # Reuse the same backend path as iOS by calling the existing handler with a server-built plan.
     try:
         plan, _meta = await generate_weekly_plan_openai_required(user_id=user_id)
-        resp = await send_chat(user_id=user_id, user_message=text_body, current_plan=plan)
+        resp = await send_chat(
+            user_id=user_id,
+            user_message=text_body,
+            current_plan=plan,
+            export_source={
+                "channel": "whatsapp",
+                "platform": "whatsapp",
+                "route": "/whatsapp/webhook",
+                "transport": "webhook",
+            },
+        )
         await _send_text(to_wa_id=wa_id, text=resp.assistant_message.text)
         return {"status": "ok"}
     except HTTPException as e:

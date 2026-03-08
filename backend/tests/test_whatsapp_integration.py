@@ -176,9 +176,17 @@ def test_whatsapp_webhook_linked_routes_through_chat_core(monkeypatch, tmp_path)
             {"meta": "ok"},
         )
 
-    async def fake_send_chat(*, user_id: str, user_message: str, current_plan: WeeklyPlan) -> ChatSendResponse:
+    async def fake_send_chat(
+        *,
+        user_id: str,
+        user_message: str,
+        current_plan: WeeklyPlan,
+        export_source=None,
+    ) -> ChatSendResponse:
         assert user_id == "u1"
         assert user_message == "Hi"
+        assert export_source is not None
+        assert export_source["channel"] == "whatsapp"
         return ChatSendResponse(
             assistant_message=ChatMessage(id="a1", role="assistant", text="Hello from StudyBuddy", timestamp="t"),
             best_next_action=None,

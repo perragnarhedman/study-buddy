@@ -47,7 +47,14 @@ def test_debug_export_writes_trace_file(tmp_path: Path, monkeypatch: pytest.Monk
     client = TestClient(app)
     r = client.post(
         "/chat/send",
-        headers={"Authorization": f"Bearer {token}"},
+        headers={
+            "Authorization": f"Bearer {token}",
+            "X-Request-ID": "rid-chat-123",
+            "X-Client-Channel": "ios_app",
+            "X-Client-Platform": "ios",
+            "X-App-Version": "1.2.3",
+            "X-App-Build": "456",
+        },
         json={
             "user_message": "Hej",
             "current_plan": {
@@ -76,10 +83,107 @@ def test_debug_export_writes_trace_file(tmp_path: Path, monkeypatch: pytest.Monk
 
     obj = json.loads(files[0].read_text(encoding="utf-8"))
     assert obj["type"] == "chat_trace"
-    assert "payload" in obj
+    assert obj["schema_version"] == 2
+    assert obj["source"] == {
+        "channel": "ios_app",
+        "platform": "ios",
+        "app_version": "1.2.3",
+        "build": "456",
+        "route": "/chat/send",
+        "transport": "http",
+        "request_id": "rid-chat-123",
+    }
+    assert obj["request"]["user_message"] == "Hej"
+    assert obj["context"]["conversation_summary"] == ""
+    assert obj["context"]["user_state"] == {}
+    assert obj["model"]["attempts"][0]["prompt"]
+    assert obj["model"]["attempts"][0]["raw_model_output"] == "RAW MODEL OUTPUT"
+    assert obj["response"]["assistant_text"] == "Hej!"
+    assert obj["response"]["selected_assignment_id"] == "a1"
+    assert "install_id" not in obj["source"]
     assert obj["payload"]["user_message"] == "Hej"
-    assert "attempts" in obj["payload"]
-    assert obj["payload"]["attempts"][0]["prompt"]
     assert obj["payload"]["attempts"][0]["raw_model_output"] == "RAW MODEL OUTPUT"
+
+
+def test_debug_export_writes_stream_trace_with_transport_metadata(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    monkeypatch.setenv("SESSION_SECRET", "test-secret")
+    monkeypatch.setenv("SQLITE_PATH", str(tmp_path / "test.db"))
+    monkeypatch.setenv("DEBUG_EXPORT_ENABLED", "true")
+    monkeypatch.setenv("DEBUG_EXPORT_DIR", str(tmp_path / "exports"))
+    get_settings.cache_clear()
+
+    import app.routes.chat as chat_route
+
+    async def fake_select_assignments(_user_id):
+        return (
+            [
+                Assignment(id="a1", title="Start something", dueDate=None, courseName="Course", description=None, url=None, estimatedMinutes=None),
+            ],
+            {"used_classroom": False, "used_fixture": False},
+        )
+
+    async def fake_stream_events(**kwargs):
+        raw = json.dumps(
+            {
+                "assistant_text": "Hi!\n\nMath next.",
+                "selected_assignment_id": "a1",
+                "mark_done_assignment_id": None,
+                "selected_plan_item_id": None,
+                "mark_done_plan_item_id": None,
+                "reply_language": "en",
+            }
+        )
+        for idx in range(0, len(raw), 10):
+            yield {"type": "response.output_text.delta", "delta": raw[idx : idx + 10]}
+
+    monkeypatch.setattr(chat_route, "select_assignments", fake_select_assignments)
+    monkeypatch.setattr(chat_route, "coach_stream_raw_events", fake_stream_events)
+
+    token = issue_session_token("u1")
+    client = TestClient(app)
+    with client.stream(
+        "POST",
+        "/chat/send_stream",
+        headers={
+            "Authorization": f"Bearer {token}",
+            "X-Request-ID": "rid-stream-456",
+            "X-Client-Channel": "sim_harness",
+            "X-Client-Platform": "backend",
+        },
+        json={
+            "user_message": "What should I do now?",
+            "current_plan": {
+                "weekStart": "2026-01-13",
+                "items": [
+                    {
+                        "id": "p1",
+                        "title": "Start something",
+                        "dueDate": None,
+                        "estimatedMinutes": 15,
+                        "status": "todo",
+                        "sourceAssignmentId": "a1",
+                    }
+                ],
+            },
+        },
+    ) as response:
+        assert response.status_code == 200
+        events = [json.loads(line) for line in response.iter_lines() if line]
+
+    assert any(event["type"] == "turn_completed" for event in events)
+
+    exports_dir = tmp_path / "exports"
+    date_dirs = [p for p in exports_dir.iterdir() if p.is_dir()]
+    files = list(date_dirs[0].glob("*.json"))
+    obj = json.loads(files[0].read_text(encoding="utf-8"))
+    assert obj["source"]["channel"] == "sim_harness"
+    assert obj["source"]["platform"] == "backend"
+    assert obj["source"]["route"] == "/chat/send_stream"
+    assert obj["source"]["transport"] == "stream"
+    assert obj["source"]["request_id"] == "rid-stream-456"
+    assert obj["response"]["assistant_text"] == "Hi!\n\nMath next."
 
 

@@ -43,9 +43,10 @@ def export_chat_trace(*, user_id: str, payload: dict) -> DebugExportResult:
 
     full_payload = {
         "type": "chat_trace",
+        "schema_version": 2,
         "created_at": now.isoformat(),
         "user_hash": user_hash,
-        "payload": payload,
+        **payload,
     }
 
     tmp_path = out_dir / f".{fname}.tmp"
