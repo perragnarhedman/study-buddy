@@ -121,54 +121,81 @@ private struct MessageRow: View {
     let message: ChatMessage
 
     var isUser: Bool { message.role == .user }
+    private let assistantBubbleColor = Color(red: 0.20, green: 0.78, blue: 0.35)
 
     var body: some View {
-        HStack {
-            if isUser { Spacer(minLength: 40) }
-
-            VStack(alignment: isUser ? .trailing : .leading, spacing: 4) {
-                messageBubble(text: message.text, isUser: isUser)
-
-                Text(message.role == .assistant ? "Coach" : "You")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
+        HStack(alignment: .bottom, spacing: 8) {
+            if isUser {
+                Spacer(minLength: 40)
+                messageBubble(text: message.text, isUser: true)
+            } else {
+                assistantAvatar
+                messageBubble(text: message.text, isUser: false)
+                Spacer(minLength: 40)
             }
-
-            if !isUser { Spacer(minLength: 40) }
         }
     }
 
     @ViewBuilder
     private func messageBubble(text: String, isUser: Bool) -> some View {
-        Text(text)
+        Text(formattedMessageText(text))
             .font(.body)
             .multilineTextAlignment(.leading)
-            .foregroundStyle(isUser ? .white : .primary)
+            .foregroundStyle(.white)
             .padding(.horizontal, 12)
             .padding(.vertical, 10)
-            .background(isUser ? Color.accentColor : Color(.secondarySystemBackground))
-            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-            .frame(maxWidth: 280, alignment: isUser ? .trailing : .leading)
+            .background(
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .fill(isUser ? Color.accentColor : assistantBubbleColor)
+                    .shadow(color: (isUser ? Color.accentColor : assistantBubbleColor).opacity(0.18), radius: 8, y: 2)
+            )
+            .frame(maxWidth: 300, alignment: isUser ? .trailing : .leading)
+    }
+
+    private func formattedMessageText(_ text: String) -> AttributedString {
+        let options = AttributedString.MarkdownParsingOptions(
+            interpretedSyntax: .inlineOnlyPreservingWhitespace
+        )
+        if let formatted = try? AttributedString(markdown: text, options: options) {
+            return formatted
+        }
+        return AttributedString(text.replacingOccurrences(of: "**", with: ""))
+    }
+
+    private var assistantAvatar: some View {
+        ZStack {
+            Circle()
+                .fill(assistantBubbleColor.opacity(0.18))
+            Image(systemName: "sparkles")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(assistantBubbleColor)
+        }
+        .frame(width: 28, height: 28)
     }
 }
 
 private struct TypingIndicatorRow: View {
+    private let assistantBubbleColor = Color(red: 0.20, green: 0.78, blue: 0.35)
+
     var body: some View {
-        HStack {
-            VStack(alignment: .leading, spacing: 4) {
-                TypingIndicatorBubble()
-
-                Text("Coach")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
+        HStack(alignment: .bottom, spacing: 8) {
+            ZStack {
+                Circle()
+                    .fill(assistantBubbleColor.opacity(0.18))
+                Image(systemName: "sparkles")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(assistantBubbleColor)
             }
-
+            .frame(width: 28, height: 28)
+            TypingIndicatorBubble()
             Spacer(minLength: 40)
         }
     }
 }
 
 private struct TypingIndicatorBubble: View {
+    private let assistantBubbleColor = Color(red: 0.20, green: 0.78, blue: 0.35)
+
     var body: some View {
         TimelineView(.animation) { context in
             let phase = Int(context.date.timeIntervalSinceReferenceDate * 3) % 3
@@ -176,17 +203,20 @@ private struct TypingIndicatorBubble: View {
             HStack(spacing: 6) {
                 ForEach(0..<3, id: \.self) { index in
                     Circle()
-                        .fill(Color.secondary)
+                        .fill(Color.white)
                         .frame(width: 8, height: 8)
-                        .opacity(index == phase ? 1 : 0.3)
+                        .opacity(index == phase ? 1 : 0.45)
                         .scaleEffect(index == phase ? 1 : 0.85)
                 }
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 12)
-            .background(Color(.secondarySystemBackground))
-            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .background(
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .fill(assistantBubbleColor)
+                    .shadow(color: assistantBubbleColor.opacity(0.18), radius: 8, y: 2)
+            )
         }
-        .frame(maxWidth: 280, alignment: .leading)
+        .frame(maxWidth: 300, alignment: .leading)
     }
 }
