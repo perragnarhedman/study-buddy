@@ -56,8 +56,10 @@ class PreparedChatContext:
     reference_assignments: list[dict]
     last_selected_plan_item_id: str | None
     last_selected_assignment_id: str | None
+    visible_chat_is_empty: bool
     ack: bool
     short_followup: bool
+    fresh_visible_chat_turn: bool
     lang_hint: str
     conversation_history: str
     conversation_summary: str
@@ -109,38 +111,7 @@ def _best_mark_done_candidate_id(*, user_text: str, candidates: list[dict]) -> O
     Heuristic: if the user indicates completion and there is a single clear match among candidates,
     return that candidate id; otherwise None (ambiguous).
     """
-    ut = (user_text or "").lower()
-    if not ut:
-        return None
-    scored: list[tuple[int, str]] = []
-    for c in candidates:
-        cid = c.get("id")
-        title = str(c.get("title") or "").lower()
-        course = str(c.get("courseName") or "").lower()
-        if not isinstance(cid, str) or not cid:
-            continue
-        score = 0
-        if title and title in ut:
-            score += 3
-        if course and course in ut:
-            score += 2
-        # Add a small boost for title keyword overlap.
-        for w in title.replace(":", " ").replace("-", " ").split():
-            if len(w) >= 4 and w in ut:
-                score += 1
-                break
-        if score > 0:
-            scored.append((score, cid))
-    if not scored:
-        return None
-    scored.sort(reverse=True)
-    best_score, best_id = scored[0]
-    # Require a reasonably strong, unique match.
-    if best_score < 2:
-        return None
-    if len(scored) >= 2 and scored[1][0] == best_score:
-        return None
-    return best_id
+    return _best_candidate_id_for_text(user_text=user_text, candidates=candidates)
 
 
 def _is_overview_request(text: str) -> bool:
@@ -190,6 +161,47 @@ def _is_specific_task_request(text: str) -> bool:
     )
 
 
+def _is_greeting(text: str) -> bool:
+    t = (text or "").strip().lower().strip(".!?")
+    return t in {
+        "hej",
+        "hej hej",
+        "hejsan",
+        "hi",
+        "hello",
+        "hey",
+        "tjena",
+        "hallå",
+        "halla",
+    }
+
+
+def _is_reopen_request(text: str) -> bool:
+    t = (text or "").strip().lower()
+    if not t:
+        return False
+    return any(
+        phrase in t
+        for phrase in [
+            "reopen",
+            "open again",
+            "continue it again",
+            "work on it again",
+            "öppna",
+            "oppna",
+            "öppna den igen",
+            "oppna den igen",
+            "öppna engelskan igen",
+            "oppna engelskan igen",
+            "fortsätt med den",
+            "fortsatt med den",
+            "jobba vidare på den",
+            "öppna uppgiften igen",
+            "open the assignment again",
+        ]
+    )
+
+
 def _last_assistant_text(history: list[dict[str, Any]]) -> str:
     for item in reversed(history):
         if item.get("role") == "assistant":
@@ -201,7 +213,7 @@ def _last_assistant_text(history: list[dict[str, Any]]) -> str:
 
 def _looks_like_short_followup_answer(*, user_text: str, last_assistant_text: str) -> bool:
     ut = (user_text or "").strip()
-    if not ut or _is_overview_request(ut) or _is_specific_task_request(ut):
+    if not ut or _is_greeting(ut) or _is_overview_request(ut) or _is_specific_task_request(ut):
         return False
     if len(ut) > 40 or len(ut.split()) > 4:
         return False
@@ -267,6 +279,39 @@ def _is_likely_off_scope_request(text: str) -> bool:
     ]
     return any(marker in t for marker in off_scope_markers)
 
+
+def _best_candidate_id_for_text(*, user_text: str, candidates: list[dict]) -> Optional[str]:
+    ut = (user_text or "").lower()
+    if not ut:
+        return None
+    scored: list[tuple[int, str]] = []
+    for c in candidates:
+        cid = c.get("id")
+        title = str(c.get("title") or "").lower()
+        course = str(c.get("courseName") or "").lower()
+        if not isinstance(cid, str) or not cid:
+            continue
+        score = 0
+        if title and title in ut:
+            score += 3
+        if course and course in ut:
+            score += 2
+        for w in title.replace(":", " ").replace("-", " ").split():
+            if len(w) >= 4 and w in ut:
+                score += 1
+                break
+        if score > 0:
+            scored.append((score, cid))
+    if not scored:
+        return None
+    scored.sort(reverse=True)
+    best_score, best_id = scored[0]
+    if best_score < 2:
+        return None
+    if len(scored) >= 2 and scored[1][0] == best_score:
+        return None
+    return best_id
+
 def _update_rolling_summary(prev: str, user_text: str, assistant_text: str, *, max_chars: int = 1200) -> str:
     """
     Rolling summary used as *optional* context for the coach prompt.
@@ -316,6 +361,7 @@ async def _prepare_chat_context(
         raise HTTPException(status_code=400, detail="user_message required")
 
     plan_items = payload.current_plan.items if (payload.current_plan and payload.current_plan.items) else []
+    visible_chat_is_empty = bool(payload.visible_chat_is_empty)
     lang_hint = _detect_lang_hint(user_text)
 
     if payload.current_plan and payload.current_plan.items:
@@ -419,10 +465,17 @@ async def _prepare_chat_context(
             break
 
     hist = get_chat_history(user_id=user_id, limit=10)
-    conversation_history = "\n".join([f"{h['role']}: {h['text']}" for h in hist])
     last_assistant_text = _last_assistant_text(hist)
+    fresh_visible_chat_turn = visible_chat_is_empty and _is_greeting(user_text)
+    prompt_history = [] if fresh_visible_chat_turn else hist
+    conversation_history = "\n".join([f"{h['role']}: {h['text']}" for h in prompt_history])
     user_state_obj = get_user_state(user_id=user_id)
     conversation_summary = _sanitize_user_only_summary(str(user_state_obj.get("conversation_summary") or ""))
+    if fresh_visible_chat_turn:
+        conversation_summary = ""
+        user_state_obj.pop("last_selected_plan_item_id", None)
+        user_state_obj.pop("last_selected_assignment_id", None)
+        user_state_obj.pop("conversation_summary", None)
     if conversation_summary:
         user_state_obj["conversation_summary"] = conversation_summary
     else:
@@ -436,6 +489,10 @@ async def _prepare_chat_context(
     if _is_likely_off_scope_request(user_text):
         runtime_notes.append(
             "The student's latest request appears off-scope unless it is clearly tied to an assignment in the active candidates, the reference assignments, or pasted/uploaded assignment instructions. If it is not tied to homework, politely refuse and redirect them back to Classroom or pasted/uploaded assignment text."
+        )
+    if fresh_visible_chat_turn:
+        runtime_notes.append(
+            "The visible chat is empty and the student started with a fresh greeting. Treat this turn as a new conversation opener. Do not continue a hidden previous thread unless the student explicitly asks to continue older work."
         )
     if short_followup:
         runtime_notes.append(
@@ -452,8 +509,10 @@ async def _prepare_chat_context(
         reference_assignments=reference_assignments,
         last_selected_plan_item_id=last_selected_plan_item_id,
         last_selected_assignment_id=last_selected_assignment_id,
+        visible_chat_is_empty=visible_chat_is_empty,
         ack=ack,
         short_followup=short_followup,
+        fresh_visible_chat_turn=fresh_visible_chat_turn,
         lang_hint=lang_hint,
         conversation_history=conversation_history,
         conversation_summary=conversation_summary,
@@ -506,6 +565,7 @@ def _build_debug_export_payload(
     best_next_action_id: str | None,
     selected_assignment_id: str | None,
     mark_done_assignment_id: str | None,
+    reopen_assignment_id: str | None,
 ) -> dict[str, Any]:
     legacy_payload = {
         "user_message": prepared.user_text,
@@ -520,6 +580,7 @@ def _build_debug_export_payload(
             "best_next_action_id": best_next_action_id,
             "selected_assignment_id": selected_assignment_id,
             "mark_done_assignment_id": mark_done_assignment_id,
+            "reopen_assignment_id": reopen_assignment_id,
         },
     }
 
@@ -529,6 +590,7 @@ def _build_debug_export_payload(
             "user_message": prepared.user_text,
             "lang_hint": prepared.lang_hint,
             "acknowledgement_message": prepared.ack,
+            "visible_chat_is_empty": prepared.visible_chat_is_empty,
         },
         "context": {
             "conversation_history": prepared.conversation_history,
@@ -546,6 +608,7 @@ def _build_debug_export_payload(
             "best_next_action_id": best_next_action_id,
             "selected_assignment_id": selected_assignment_id,
             "mark_done_assignment_id": mark_done_assignment_id,
+            "reopen_assignment_id": reopen_assignment_id,
         },
         # Temporary duplicate during rollout so existing workflows can keep using payload.
         "payload": legacy_payload,
@@ -556,10 +619,24 @@ def _candidate_ids(prepared: PreparedChatContext) -> set[str]:
     return {str(c.get("id")) for c in prepared.candidates if isinstance(c.get("id"), str)}
 
 
+def _reference_assignment_ids(prepared: PreparedChatContext) -> set[str]:
+    return {
+        str(c.get("id"))
+        for c in prepared.reference_assignments
+        if isinstance(c.get("id"), str)
+    }
+
+
 def _model_user_message(prepared: PreparedChatContext, *, extra_note: str = "") -> str:
     msg = prepared.user_text if not extra_note else f"{prepared.user_text}\n\nNOTE: {extra_note}"
     if prepared.ack and (prepared.last_selected_assignment_id or prepared.last_selected_plan_item_id):
-        msg = f"{msg}\n\nNOTE: The student is acknowledging your previous suggestion. Continue the same task/thread; do not switch subjects."
+        if prepared.last_selected_assignment_id in _reference_assignment_ids(prepared):
+            msg = (
+                f"{msg}\n\nNOTE: The student is acknowledging your previous suggestion about a reference assignment. "
+                "If they want to work on that old assignment again, use reopen_assignment_id for it instead of switching to unrelated active tasks."
+            )
+        else:
+            msg = f"{msg}\n\nNOTE: The student is acknowledging your previous suggestion. Continue the same task/thread; do not switch subjects."
     for note in prepared.runtime_notes:
         msg = f"{msg}\n\nNOTE: {note}"
     return msg
@@ -574,6 +651,7 @@ def _attempt_entry(prepared: PreparedChatContext, *, extra_note: str = "") -> di
         conversation_history=prepared.conversation_history,
         conversation_summary=prepared.conversation_summary,
         user_state_json=prepared.user_state_json,
+        visible_chat_is_empty=prepared.visible_chat_is_empty,
     )
     return {
         "extra_note": extra_note,
@@ -608,7 +686,7 @@ def _selected_assignment_id(
         raise HTTPException(status_code=502, detail="OpenAI returned invalid selection")
 
     if not selected_assignment_id and _is_specific_task_request(prepared.user_text):
-        inferred = _best_mark_done_candidate_id(
+        inferred = _best_candidate_id_for_text(
             user_text=prepared.user_text,
             candidates=prepared.candidates,
         )
@@ -617,6 +695,27 @@ def _selected_assignment_id(
             decision.selected_plan_item_id = None
             return inferred
     return selected_assignment_id
+
+
+def _reopen_assignment_id(prepared: PreparedChatContext, decision: CoachDecision) -> str | None:
+    reopen_assignment_id = getattr(decision, "reopen_assignment_id", None)
+    if reopen_assignment_id and reopen_assignment_id in _reference_assignment_ids(prepared):
+        return reopen_assignment_id
+    if reopen_assignment_id:
+        return None
+    if prepared.last_selected_assignment_id and prepared.ack:
+        if prepared.last_selected_assignment_id in _reference_assignment_ids(prepared):
+            decision.reopen_assignment_id = prepared.last_selected_assignment_id
+            return prepared.last_selected_assignment_id
+    if _is_reopen_request(prepared.user_text):
+        inferred = _best_candidate_id_for_text(
+            user_text=prepared.user_text,
+            candidates=prepared.reference_assignments,
+        )
+        if inferred and inferred in _reference_assignment_ids(prepared):
+            decision.reopen_assignment_id = inferred
+            return inferred
+    return None
 
 
 def _has_invalid_selected_assignment(prepared: PreparedChatContext, decision: CoachDecision) -> bool:
@@ -634,6 +733,7 @@ def _attach_decision_metadata(attempts: list[dict[str, Any]], decision: CoachDec
     for attempt in attempts:
         attempt["decision"] = {
             "selected_assignment_id": getattr(decision, "selected_assignment_id", None),
+            "reopen_assignment_id": getattr(decision, "reopen_assignment_id", None),
             "selected_plan_item_id": getattr(decision, "selected_plan_item_id", None),
             "mark_done_assignment_id": getattr(decision, "mark_done_assignment_id", None),
             "mark_done_plan_item_id": getattr(decision, "mark_done_plan_item_id", None),
@@ -646,7 +746,7 @@ async def _finalize_coach_decision(
     decision: CoachDecision,
     *,
     retry_invalid_selection: Any = None,
-) -> tuple[CoachDecision, str | None]:
+) -> tuple[CoachDecision, str | None, str | None]:
     if _has_invalid_selected_assignment(prepared, decision):
         if retry_invalid_selection is None:
             logger.warning("chat_stream_invalid_selection user_id=%s", prepared.user_id)
@@ -658,7 +758,12 @@ async def _finalize_coach_decision(
         decision,
         allow_invalid=retry_invalid_selection is None,
     )
-    return decision, selected_assignment_id
+    reopen_assignment_id = _reopen_assignment_id(prepared, decision)
+    if reopen_assignment_id and not selected_assignment_id:
+        selected_assignment_id = reopen_assignment_id
+        decision.selected_assignment_id = reopen_assignment_id
+        decision.selected_plan_item_id = None
+    return decision, selected_assignment_id, reopen_assignment_id
 
 
 def _build_chat_response(
@@ -667,15 +772,21 @@ def _build_chat_response(
     *,
     attempts: list[dict[str, Any]],
     selected_assignment_id: str | None,
+    reopen_assignment_id: str | None,
 ) -> ChatSendResponse:
     if prepared.ack and prepared.last_selected_assignment_id and not selected_assignment_id:
         if prepared.last_selected_assignment_id in _candidate_ids(prepared):
             selected_assignment_id = prepared.last_selected_assignment_id
             decision.selected_assignment_id = prepared.last_selected_assignment_id
+    if reopen_assignment_id:
+        prepared.assignment_status_map[reopen_assignment_id] = "todo"
+        for item in prepared.plan_items:
+            if item.sourceAssignmentId == reopen_assignment_id and item.status == "done":
+                item.status = "todo"
 
     mark_done_assignment_id = getattr(decision, "mark_done_assignment_id", None)
     if not mark_done_assignment_id and _is_completion_utterance(prepared.user_text):
-        inferred = _best_mark_done_candidate_id(user_text=prepared.user_text, candidates=prepared.candidates)
+        inferred = _best_candidate_id_for_text(user_text=prepared.user_text, candidates=prepared.candidates)
         if inferred:
             mark_done_assignment_id = inferred
             decision.mark_done_assignment_id = inferred
@@ -728,6 +839,7 @@ def _build_chat_response(
         selected_plan_item_id=(best_next_action.id if best_next_action is not None else None),
         selected_assignment_id=selected_assignment_id,
         mark_done_assignment_id=mark_done_assignment_id,
+        reopen_assignment_id=reopen_assignment_id,
     )
 
     assistant_message = ChatMessage(id=new_id(), role="assistant", text=text, timestamp=iso_now())
@@ -743,6 +855,7 @@ def _build_chat_response(
                 best_next_action_id=(best_next_action.id if best_next_action else None),
                 selected_assignment_id=selected_assignment_id,
                 mark_done_assignment_id=mark_done_assignment_id,
+                reopen_assignment_id=reopen_assignment_id,
             ),
         )
     except Exception:
@@ -821,6 +934,7 @@ async def _chat_send_impl(
                 conversation_history=prepared.conversation_history,
                 conversation_summary=prepared.conversation_summary,
                 user_state_json=prepared.user_state_json,
+                visible_chat_is_empty=prepared.visible_chat_is_empty,
             )
             attempts[-1]["raw_model_output"] = raw
             return decision
@@ -832,6 +946,7 @@ async def _chat_send_impl(
             conversation_history=prepared.conversation_history,
             conversation_summary=prepared.conversation_summary,
             user_state_json=prepared.user_state_json,
+            visible_chat_is_empty=prepared.visible_chat_is_empty,
         )
 
     # Call coach; retry once if the model fails to select a valid candidate id.
@@ -846,7 +961,7 @@ async def _chat_send_impl(
         raise HTTPException(status_code=503, detail="OpenAI unavailable")
 
     try:
-        decision, selected_assignment_id = await _finalize_coach_decision(
+        decision, selected_assignment_id, reopen_assignment_id = await _finalize_coach_decision(
             prepared,
             decision,
             retry_invalid_selection=_call_coach,
@@ -863,6 +978,7 @@ async def _chat_send_impl(
         decision,
         attempts=attempts,
         selected_assignment_id=selected_assignment_id,
+        reopen_assignment_id=reopen_assignment_id,
     )
 
 
@@ -911,6 +1027,7 @@ async def chat_send_stream(
                 conversation_history=prepared.conversation_history,
                 conversation_summary=prepared.conversation_summary,
                 user_state_json=prepared.user_state_json,
+                visible_chat_is_empty=prepared.visible_chat_is_empty,
             ):
                 if event.get("type") != "response.output_text.delta":
                     continue
@@ -927,7 +1044,7 @@ async def chat_send_stream(
             raw_output = "".join(raw_output_parts).strip()
             attempts[-1]["raw_model_output"] = raw_output
             decision = CoachDecision.model_validate(_parse_json_object_relaxed(raw_output))
-            decision, selected_assignment_id = await _finalize_coach_decision(
+            decision, selected_assignment_id, reopen_assignment_id = await _finalize_coach_decision(
                 prepared,
                 decision,
             )
@@ -936,6 +1053,7 @@ async def chat_send_stream(
                 decision,
                 attempts=attempts,
                 selected_assignment_id=selected_assignment_id,
+                reopen_assignment_id=reopen_assignment_id,
             )
 
             for bubble_event in formatter.finish():

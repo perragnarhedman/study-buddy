@@ -1,0 +1,19 @@
+{
+  "scenario_id": "int-005",
+  "title": "Integration: reopen a resolved assignment and continue it on ack",
+  "language": "en",
+  "constraints": { "max_turns": 3 },
+  "assignments": [
+    { "id": "a1", "title": "English essay", "courseName": "English", "dueDate": null, "description": "Write a five-paragraph essay.", "estimatedMinutes": 45 },
+    { "id": "a2", "title": "Math practice", "courseName": "Math", "dueDate": null, "description": "Problems 1-10.", "estimatedMinutes": 30 }
+  ],
+  "user_messages": [
+    "I finished the English essay.",
+    "Open English again.",
+    "Yes"
+  ],
+  "expected": {
+    "require_any_selection": true,
+    "expected_selected_assignment_id": "a1"
+  }
+}

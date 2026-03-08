@@ -71,6 +71,7 @@ class WeeklyPlan(BaseModel):
 class ChatSendRequest(BaseModel):
     user_message: str
     current_plan: Optional[WeeklyPlan] = None
+    visible_chat_is_empty: bool = False
 
 
 class ChatSendResponse(BaseModel):

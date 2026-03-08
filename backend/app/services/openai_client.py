@@ -147,6 +147,7 @@ async def coach_decide(
     conversation_history: str = "",
     conversation_summary: str = "",
     user_state_json: str = "",
+    visible_chat_is_empty: bool = False,
 ) -> CoachDecision:
     decision, _raw = await coach_decide_with_raw(
         user_message=user_message,
@@ -155,6 +156,7 @@ async def coach_decide(
         conversation_history=conversation_history,
         conversation_summary=conversation_summary,
         user_state_json=user_state_json,
+        visible_chat_is_empty=visible_chat_is_empty,
     )
     return decision
 
@@ -167,6 +169,7 @@ async def coach_decide_with_raw(
     conversation_history: str = "",
     conversation_summary: str = "",
     user_state_json: str = "",
+    visible_chat_is_empty: bool = False,
 ) -> tuple[CoachDecision, str]:
     """
     Like coach_decide(), but also returns the raw model output text.
@@ -187,6 +190,7 @@ async def coach_decide_with_raw(
             "conversation_history": conversation_history,
             "conversation_summary": conversation_summary,
             "user_state_json": user_state_json,
+            "visible_chat_is_empty": json.dumps(bool(visible_chat_is_empty)),
         },
     )
     prompt = f"{system_prompt}\n\n{user_prompt}\n"
@@ -209,6 +213,7 @@ def build_coach_prompt(
     conversation_history: str = "",
     conversation_summary: str = "",
     user_state_json: str = "",
+    visible_chat_is_empty: bool = False,
 ) -> str:
     system_prompt = load_text("coach_system.txt")
     user_prompt_template = load_text("coach_user.txt")
@@ -221,6 +226,7 @@ def build_coach_prompt(
             "conversation_history": conversation_history,
             "conversation_summary": conversation_summary,
             "user_state_json": user_state_json,
+            "visible_chat_is_empty": json.dumps(bool(visible_chat_is_empty)),
         },
     )
     return f"{system_prompt}\n\n{user_prompt}\n"
@@ -234,6 +240,7 @@ async def coach_stream_raw_events(
     conversation_history: str = "",
     conversation_summary: str = "",
     user_state_json: str = "",
+    visible_chat_is_empty: bool = False,
 ) -> AsyncIterator[dict]:
     settings = get_settings()
     if not settings.openai_api_key:
@@ -246,6 +253,7 @@ async def coach_stream_raw_events(
         conversation_history=conversation_history,
         conversation_summary=conversation_summary,
         user_state_json=user_state_json,
+        visible_chat_is_empty=visible_chat_is_empty,
     )
 
     async for event in _responses_stream_events(

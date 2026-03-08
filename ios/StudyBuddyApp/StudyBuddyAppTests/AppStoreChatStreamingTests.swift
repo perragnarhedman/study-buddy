@@ -3,6 +3,43 @@ import XCTest
 
 @MainActor
 final class AppStoreChatStreamingTests: XCTestCase {
+    func testFirstOutgoingRequestFromFreshVisibleChatMarksVisibleChatEmpty() async {
+        let api = MockChatAPIClient(
+            streamEvents: [
+                .init(type: .typingStarted, messageId: nil, delta: nil, bestNextAction: nil, message: nil),
+                .init(type: .turnCompleted, messageId: nil, delta: nil, bestNextAction: nil, message: nil),
+            ]
+        )
+        let store = AppStore(
+            apiClientFactory: { _ in api },
+            sessionTokenProvider: { nil }
+        )
+        store.useStubData = false
+
+        await store.sendUserMessage("Hej")
+
+        XCTAssertEqual(api.sendChatStreamCalls.map(\.visibleChatIsEmpty), [true])
+    }
+
+    func testLaterOutgoingRequestFromSameVisibleChatDoesNotMarkVisibleChatEmpty() async {
+        let api = MockChatAPIClient(
+            streamEvents: [
+                .init(type: .typingStarted, messageId: nil, delta: nil, bestNextAction: nil, message: nil),
+                .init(type: .turnCompleted, messageId: nil, delta: nil, bestNextAction: nil, message: nil),
+            ]
+        )
+        let store = AppStore(
+            apiClientFactory: { _ in api },
+            sessionTokenProvider: { nil }
+        )
+        store.useStubData = false
+
+        await store.sendUserMessage("Hej")
+        await store.sendUserMessage("Vad har jag?")
+
+        XCTAssertEqual(api.sendChatStreamCalls.map(\.visibleChatIsEmpty), [true, false])
+    }
+
     func testSendUserMessageBuildsAssistantBubblesFromStream() async {
         let api = MockChatAPIClient(
             streamEvents: [
@@ -143,10 +180,16 @@ final class AppStoreChatStreamingTests: XCTestCase {
 }
 
 private final class MockChatAPIClient: ChatAPIClient {
+    struct ChatCall: Equatable {
+        let userMessage: String
+        let visibleChatIsEmpty: Bool
+    }
+
     private let streamEvents: [ChatStreamEvent]
     private let streamError: Error?
     private let fallbackResponse: ChatSendResponse
-    private(set) var sendChatCalls: [String] = []
+    private(set) var sendChatCalls: [ChatCall] = []
+    private(set) var sendChatStreamCalls: [ChatCall] = []
 
     init(
         streamEvents: [ChatStreamEvent] = [],
@@ -161,12 +204,13 @@ private final class MockChatAPIClient: ChatAPIClient {
         self.fallbackResponse = fallbackResponse
     }
 
-    func sendChat(userMessage: String, sessionToken: String?) async throws -> ChatSendResponse {
-        sendChatCalls.append(userMessage)
+    func sendChat(userMessage: String, visibleChatIsEmpty: Bool, sessionToken: String?) async throws -> ChatSendResponse {
+        sendChatCalls.append(.init(userMessage: userMessage, visibleChatIsEmpty: visibleChatIsEmpty))
         return fallbackResponse
     }
 
-    func sendChatStream(userMessage: String, sessionToken: String?) -> AsyncThrowingStream<ChatStreamEvent, Error> {
+    func sendChatStream(userMessage: String, visibleChatIsEmpty: Bool, sessionToken: String?) -> AsyncThrowingStream<ChatStreamEvent, Error> {
+        sendChatStreamCalls.append(.init(userMessage: userMessage, visibleChatIsEmpty: visibleChatIsEmpty))
         AsyncThrowingStream { continuation in
             if let streamError {
                 continuation.finish(throwing: streamError)

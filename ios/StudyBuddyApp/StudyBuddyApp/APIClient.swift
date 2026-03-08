@@ -10,8 +10,8 @@ enum APIError: Error {
 }
 
 protocol ChatAPIClient {
-    func sendChat(userMessage: String, sessionToken: String?) async throws -> ChatSendResponse
-    func sendChatStream(userMessage: String, sessionToken: String?) -> AsyncThrowingStream<ChatStreamEvent, Error>
+    func sendChat(userMessage: String, visibleChatIsEmpty: Bool, sessionToken: String?) async throws -> ChatSendResponse
+    func sendChatStream(userMessage: String, visibleChatIsEmpty: Bool, sessionToken: String?) -> AsyncThrowingStream<ChatStreamEvent, Error>
     func resetConversation(
         sessionToken: String?,
         clearAssignmentStatus: Bool,
@@ -67,7 +67,7 @@ final class APIClient: ChatAPIClient {
         return obj?["status"] as? String == "ok"
     }
 
-    func sendChat(userMessage: String, sessionToken: String?) async throws -> ChatSendResponse {
+    func sendChat(userMessage: String, visibleChatIsEmpty: Bool, sessionToken: String?) async throws -> ChatSendResponse {
         let u = try url("chat/send")
         var req = URLRequest(url: u)
         req.httpMethod = "POST"
@@ -77,7 +77,7 @@ final class APIClient: ChatAPIClient {
             req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         }
 
-        let payload = ChatSendRequest(userMessage: userMessage)
+        let payload = ChatSendRequest(userMessage: userMessage, visibleChatIsEmpty: visibleChatIsEmpty)
         req.httpBody = try JSONEncoder().encode(payload)
 
         let (data, resp) = try await URLSession.shared.data(for: req)
@@ -93,7 +93,7 @@ final class APIClient: ChatAPIClient {
         return decoded
     }
 
-    func sendChatStream(userMessage: String, sessionToken: String?) -> AsyncThrowingStream<ChatStreamEvent, Error> {
+    func sendChatStream(userMessage: String, visibleChatIsEmpty: Bool, sessionToken: String?) -> AsyncThrowingStream<ChatStreamEvent, Error> {
         AsyncThrowingStream { continuation in
             let task = Task {
                 do {
@@ -106,7 +106,7 @@ final class APIClient: ChatAPIClient {
                         req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
                     }
 
-                    let payload = ChatSendRequest(userMessage: userMessage)
+                    let payload = ChatSendRequest(userMessage: userMessage, visibleChatIsEmpty: visibleChatIsEmpty)
                     req.httpBody = try JSONEncoder().encode(payload)
 
                     let (bytes, resp) = try await URLSession.shared.bytes(for: req)

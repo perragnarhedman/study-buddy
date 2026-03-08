@@ -61,6 +61,7 @@ def test_prompts_can_format_without_missing_keys() -> None:
             "conversation_history": "",
             "conversation_summary": "",
             "user_state_json": "{}",
+            "visible_chat_is_empty": "false",
         },
     )
     plan_user = render_template(

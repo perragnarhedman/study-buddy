@@ -109,6 +109,7 @@ async def run_backend_inprocess_turn(
     payload = {
         "user_message": user_message,
         "current_plan": _plan_from_assignments(assignments),
+        "visible_chat_is_empty": bool(do_reset),
     }
     r = await client.post("/chat/send", headers=headers, json=payload)
     r.raise_for_status()
@@ -171,6 +172,7 @@ async def run_backend_inprocess_stream_turn(
     payload = {
         "user_message": user_message,
         "current_plan": _plan_from_assignments(assignments),
+        "visible_chat_is_empty": bool(do_reset),
     }
 
     events: List[Dict[str, Any]] = []

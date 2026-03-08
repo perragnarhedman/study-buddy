@@ -140,6 +140,7 @@ final class AppStore: ObservableObject {
     func sendUserMessage(_ text: String) async {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
+        let visibleChatWasEmpty = messages.isEmpty
 
         let userMsg = ChatMessage(
             id: UUID().uuidString,
@@ -166,7 +167,11 @@ final class AppStore: ObservableObject {
 
         do {
             try await consumeChatStream(
-                api.sendChatStream(userMessage: trimmed, sessionToken: sessionToken)
+                api.sendChatStream(
+                    userMessage: trimmed,
+                    visibleChatIsEmpty: visibleChatWasEmpty,
+                    sessionToken: sessionToken
+                )
             )
             chatErrorMessage = nil
             authErrorMessage = nil
@@ -175,7 +180,11 @@ final class AppStore: ObservableObject {
 
             if !hasAssistantContent {
                 do {
-                    let fallback = try await api.sendChat(userMessage: trimmed, sessionToken: sessionToken)
+                    let fallback = try await api.sendChat(
+                        userMessage: trimmed,
+                        visibleChatIsEmpty: visibleChatWasEmpty,
+                        sessionToken: sessionToken
+                    )
                     bestNextActionFromChat = fallback.bestNextAction
                     appendAssistantReplyText(fallback.assistantMessage.text)
                     chatErrorMessage = nil

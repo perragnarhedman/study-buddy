@@ -210,6 +210,29 @@ def set_assignment_status(*, user_id: str, source_assignment_id: str, status: st
             )
 
 
+def set_assignment_statuses(
+    *, user_id: str, statuses: dict[str, str], updated_at: int
+) -> None:
+    if not statuses:
+        return
+    with db_conn() as conn:
+        with conn:
+            for source_assignment_id, status in statuses.items():
+                if not source_assignment_id or not status:
+                    continue
+                conn.execute(
+                    """
+                    INSERT INTO assignment_status (user_id, source_assignment_id, status, updated_at)
+                    VALUES (?, ?, ?, ?)
+                    ON CONFLICT(user_id, source_assignment_id) DO UPDATE SET
+                      status=excluded.status,
+                      updated_at=excluded.updated_at
+                    WHERE excluded.updated_at >= assignment_status.updated_at
+                    """,
+                    (user_id, source_assignment_id, status, updated_at),
+                )
+
+
 def get_assignment_status_map(*, user_id: str) -> dict[str, str]:
     with db_conn() as conn:
         rows = conn.execute(
@@ -252,6 +275,7 @@ def persist_chat_turn(
     selected_plan_item_id: Optional[str] = None,
     selected_assignment_id: Optional[str] = None,
     mark_done_assignment_id: Optional[str] = None,
+    reopen_assignment_id: Optional[str] = None,
 ) -> None:
     """
     Persist all state mutations from one /chat/send turn in a single transaction.
@@ -270,6 +294,18 @@ def persist_chat_turn(
                     WHERE excluded.updated_at >= assignment_status.updated_at
                     """,
                     (user_id, mark_done_assignment_id, now_ts),
+                )
+            if reopen_assignment_id:
+                conn.execute(
+                    """
+                    INSERT INTO assignment_status (user_id, source_assignment_id, status, updated_at)
+                    VALUES (?, ?, 'todo', ?)
+                    ON CONFLICT(user_id, source_assignment_id) DO UPDATE SET
+                      status='todo',
+                      updated_at=excluded.updated_at
+                    WHERE excluded.updated_at >= assignment_status.updated_at
+                    """,
+                    (user_id, reopen_assignment_id, now_ts),
                 )
 
             conn.execute(

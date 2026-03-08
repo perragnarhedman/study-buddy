@@ -37,9 +37,11 @@ struct PlanItem: Identifiable, Codable, Equatable {
 
 struct ChatSendRequest: Codable {
     let userMessage: String
+    let visibleChatIsEmpty: Bool
 
     enum CodingKeys: String, CodingKey {
         case userMessage = "user_message"
+        case visibleChatIsEmpty = "visible_chat_is_empty"
     }
 }
 

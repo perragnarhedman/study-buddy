@@ -1,0 +1,16 @@
+{
+  "scenario_id": "bllm-008",
+  "title": "Backend LLM: first greeting in an empty visible chat should start fresh",
+  "language": "sv",
+  "constraints": { "max_turns": 1 },
+  "assignments": [
+    { "id": "a1", "title": "Historia: frågor", "courseName": "History", "dueDate": null, "description": "Svara på frågorna 1-10.", "estimatedMinutes": 30 }
+  ],
+  "initial_user_message": "Hej",
+  "expected": {
+    "require_no_selection": true,
+    "expected_reply_language": "sv",
+    "assistant_text_must_contain": ["Hej"],
+    "assistant_text_forbidden_substrings": ["fortsätter vi med"]
+  }
+}

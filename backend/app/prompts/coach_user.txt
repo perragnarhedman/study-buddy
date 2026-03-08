@@ -15,6 +15,9 @@ Conversation so far (most recent last, may be empty):
 User state (JSON, may include last selection / preferences):
 {user_state_json}
 
+Visible chat is empty on the client for this turn:
+{visible_chat_is_empty}
+
 Assignment candidates (JSON array). Source of truth for what exists.
 Usage rules:
 - Only set selected_assignment_id when you are recommending, continuing, or the student has chosen a specific assignment.
@@ -41,6 +44,7 @@ Decision JSON (must be valid JSON; no extra keys):
 {
   "assistant_text": "...",
   "selected_assignment_id": null,
+  "reopen_assignment_id": null,
   "mark_done_assignment_id": null,
   "selected_plan_item_id": null,
   "mark_done_plan_item_id": null,

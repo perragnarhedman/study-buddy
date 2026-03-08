@@ -55,7 +55,9 @@ async def _install_deterministic_coach() -> None:
         user_message = str(kwargs.get("user_message") or "")
         user_message_lower = user_message.lower()
         plan_items_json = str(kwargs.get("plan_items_json") or "[]")
+        reference_assignments_json = str(kwargs.get("reference_assignments_json") or "[]")
         selected: Optional[str] = None
+        reopen: Optional[str] = None
         mark_done: Optional[str] = None
 
         # Let server rails handle mark-done inference; we intentionally do NOT set mark_done here.
@@ -68,6 +70,30 @@ async def _install_deterministic_coach() -> None:
             selected = None
         elif "likely answering your previous question" in user_message_lower:
             selected = None
+        elif "fresh greeting" in user_message_lower:
+            selected = None
+        elif any(phrase in user_message_lower for phrase in ["open again", "reopen", "öppna", "oppna", "continue that old"]):
+            try:
+                refs = json.loads(reference_assignments_json)
+                if isinstance(refs, list) and refs:
+                    first = refs[0]
+                    if isinstance(first, dict) and isinstance(first.get("id"), str):
+                        reopen = str(first["id"])
+                        selected = reopen
+            except Exception:
+                reopen = None
+                selected = None
+        elif "reference assignment" in user_message_lower and _is_ack(user_message):
+            try:
+                refs = json.loads(reference_assignments_json)
+                if isinstance(refs, list) and refs:
+                    first = refs[0]
+                    if isinstance(first, dict) and isinstance(first.get("id"), str):
+                        reopen = str(first["id"])
+                        selected = reopen
+            except Exception:
+                reopen = None
+                selected = None
         else:
             try:
                 items = json.loads(plan_items_json)
@@ -82,6 +108,7 @@ async def _install_deterministic_coach() -> None:
             assistant_text="OK",
             reply_language="en",
             selected_assignment_id=selected,
+            reopen_assignment_id=reopen,
             mark_done_assignment_id=mark_done,
         )
 
