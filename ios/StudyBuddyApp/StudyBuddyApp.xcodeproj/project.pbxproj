@@ -207,7 +207,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = io.studybuddy.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
-				STUDYBUDDY_DEFAULT_BASE_URL = "http://127.0.0.1:8000";
+				STUDYBUDDY_DEFAULT_BASE_URL = "https://study-buddy-rtvu.onrender.com";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SUPPORTS_MACCATALYST = NO;
 				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;

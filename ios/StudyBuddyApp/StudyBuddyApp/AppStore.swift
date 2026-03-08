@@ -17,6 +17,12 @@ final class AppStore: ObservableObject {
     private let sessionTokenKey = "studybuddy.sessionToken"
     var sessionToken: String? { Keychain.getString(forKey: sessionTokenKey) }
 
+    init() {
+        // If an older build saved a localhost baseURL, move it to the current default.
+        // This makes upgrades (and simulator reinstalls) behave consistently.
+        migrateSavedDefaultsIfNeeded()
+    }
+
     static var defaultBaseURL: String {
         // Prefer build-time configuration (Info.plist substitution).
         if let v = Bundle.main.object(forInfoDictionaryKey: "STUDYBUDDY_DEFAULT_BASE_URL") as? String {
@@ -35,10 +41,20 @@ final class AppStore: ObservableObject {
 
     static var defaultUseStubData: Bool {
 #if DEBUG
-        return true
+        // Match TestFlight by default; can be toggled in Debug Settings when needed.
+        return false
 #else
         return false
 #endif
+    }
+
+    private func migrateSavedDefaultsIfNeeded() {
+        let saved = baseURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        // Only auto-migrate the legacy localhost default; respect any explicit override.
+        guard saved == "http://127.0.0.1:8000" else { return }
+        let desired = Self.defaultBaseURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !desired.isEmpty, desired != saved else { return }
+        baseURL = desired
     }
 
     func assignmentDescription(forSourceAssignmentId id: String?) -> String? {
