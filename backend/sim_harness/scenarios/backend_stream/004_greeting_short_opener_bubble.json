@@ -1,0 +1,19 @@
+{
+  "scenario_id": "bstream-004",
+  "title": "Backend stream: greeting should become a short opener bubble before the overview",
+  "language": "sv",
+  "constraints": { "max_turns": 1 },
+  "assignments": [
+    { "id": "a1", "title": "Matte: algebra", "courseName": "Math", "dueDate": "2026-02-10", "description": null, "estimatedMinutes": 30 },
+    { "id": "a2", "title": "Historia: andra världskriget", "courseName": "History", "dueDate": "2026-02-12", "description": null, "estimatedMinutes": 40 },
+    { "id": "a3", "title": "Engelska: läsning", "courseName": "English", "dueDate": "2026-02-14", "description": null, "estimatedMinutes": 25 }
+  ],
+  "initial_user_message": "Hej! Vad har jag kvar att göra?",
+  "expected": {
+    "require_no_selection": true,
+    "expected_reply_language": "sv",
+    "min_stream_message_count": 3,
+    "first_stream_bubble_must_contain": "Hej",
+    "max_first_stream_bubble_chars": 12
+  }
+}

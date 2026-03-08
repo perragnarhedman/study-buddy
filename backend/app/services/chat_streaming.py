@@ -5,7 +5,12 @@ from dataclasses import dataclass, field
 from uuid import uuid4
 
 
-_SHORT_OPENER_RE = re.compile(r"^\s*([^\n]{1,40}?[.!?])(?:\s+)(?=[A-ZÅÄÖ])")
+_SHORT_OPENER_RE = re.compile(r"^\s*([^\n]{1,60}?[.!?])(?:\s+)(?=\S)")
+_PARAGRAPH_BREAK_RE = re.compile(r"\n[ \t]*\n+")
+_SUBJECT_BULLET_BOUNDARY_RE = re.compile(
+    r"\n(?=[•*-]\s*(?:Math|History|English|Matte|Historia|Engelska)\s*:)",
+    re.IGNORECASE,
+)
 
 
 @dataclass
@@ -111,11 +116,10 @@ class BubbleStreamFormatter:
     """
 
     pending_text: str = ""
-    active_message_id: str | None = None
     waiting_for_first_boundary: bool = True
 
     def feed(self, text: str) -> list[dict]:
-        self.pending_text += text
+        self.pending_text += text.replace("\r\n", "\n").replace("\r", "\n")
         return self._drain(final=False)
 
     def finish(self) -> list[dict]:
@@ -129,46 +133,55 @@ class BubbleStreamFormatter:
                 opener_split = self._consume_short_opener()
                 if opener_split is not None:
                     opener, rest = opener_split
-                    self._emit_text(opener, events)
-                    self._complete_message(events)
+                    self._emit_message(opener, events)
                     self.pending_text = rest
                     self.waiting_for_first_boundary = False
                     continue
 
-                paragraph_split = self._consume_paragraph_boundary()
-                if paragraph_split is not None:
-                    segment, rest = paragraph_split
-                    self._emit_text(segment, events)
-                    self._complete_message(events)
+                segment_split = self._consume_message_boundary()
+                if segment_split is not None:
+                    segment, rest = segment_split
+                    if not segment:
+                        self.pending_text = rest
+                        continue
+                    self._emit_message(segment, events)
                     self.pending_text = rest
                     self.waiting_for_first_boundary = False
                     continue
 
-                if final or len(self.pending_text) >= 60:
+                if final:
+                    final_text = self.pending_text.strip()
+                    if final_text:
+                        self._emit_message(final_text, events)
+                    self.pending_text = ""
                     self.waiting_for_first_boundary = False
-                    if self.pending_text:
-                        self._emit_text(self.pending_text, events)
-                        self.pending_text = ""
-                    if final:
-                        self._complete_message(events)
                     break
 
+                if len(self.pending_text.strip()) < 80:
+                    break
+
+                buffered = self.pending_text.strip()
+                if buffered:
+                    self._emit_message(buffered, events)
+                self.pending_text = ""
+                self.waiting_for_first_boundary = False
                 break
 
-            paragraph_split = self._consume_paragraph_boundary()
-            if paragraph_split is not None:
-                segment, rest = paragraph_split
-                self._emit_text(segment, events)
-                self._complete_message(events)
+            segment_split = self._consume_message_boundary()
+            if segment_split is not None:
+                segment, rest = segment_split
+                if not segment:
+                    self.pending_text = rest
+                    continue
+                self._emit_message(segment, events)
                 self.pending_text = rest
                 continue
 
-            if self.pending_text:
-                self._emit_text(self.pending_text, events)
-                self.pending_text = ""
-
             if final:
-                self._complete_message(events)
+                final_text = self.pending_text.strip()
+                if final_text:
+                    self._emit_message(final_text, events)
+                self.pending_text = ""
             break
 
         return events
@@ -184,29 +197,38 @@ class BubbleStreamFormatter:
         return opener, rest
 
     def _consume_paragraph_boundary(self) -> tuple[str, str] | None:
-        idx = self.pending_text.find("\n\n")
-        if idx == -1:
+        match = _PARAGRAPH_BREAK_RE.search(self.pending_text)
+        if match is None:
             return None
-        segment = self.pending_text[:idx].strip()
-        rest = self.pending_text[idx + 2 :].lstrip("\n")
+        segment = self.pending_text[: match.start()].strip()
+        rest = self.pending_text[match.end() :].lstrip("\n")
         return segment, rest
 
-    def _emit_text(self, text: str, events: list[dict]) -> None:
+    def _consume_subject_bullet_boundary(self) -> tuple[str, str] | None:
+        match = _SUBJECT_BULLET_BOUNDARY_RE.search(self.pending_text, 1)
+        if match is None:
+            return None
+        segment = self.pending_text[: match.start()].strip()
+        rest = self.pending_text[match.start() + 1 :].lstrip("\n")
+        return segment, rest
+
+    def _consume_message_boundary(self) -> tuple[str, str] | None:
+        paragraph_split = self._consume_paragraph_boundary()
+        bullet_split = self._consume_subject_bullet_boundary()
+
+        if paragraph_split is None:
+            return bullet_split
+        if bullet_split is None:
+            return paragraph_split
+
+        paragraph_len = len(paragraph_split[0])
+        bullet_len = len(bullet_split[0])
+        return paragraph_split if paragraph_len <= bullet_len else bullet_split
+
+    def _emit_message(self, text: str, events: list[dict]) -> None:
         if not text:
             return
-        if self.active_message_id is None:
-            self.active_message_id = str(uuid4())
-            events.append({"type": "message_started", "message_id": self.active_message_id})
-        events.append(
-            {
-                "type": "message_delta",
-                "message_id": self.active_message_id,
-                "delta": text,
-            }
-        )
-
-    def _complete_message(self, events: list[dict]) -> None:
-        if self.active_message_id is None:
-            return
-        events.append({"type": "message_completed", "message_id": self.active_message_id})
-        self.active_message_id = None
+        message_id = str(uuid4())
+        events.append({"type": "message_started", "message_id": message_id})
+        events.append({"type": "message_delta", "message_id": message_id, "delta": text})
+        events.append({"type": "message_completed", "message_id": message_id})

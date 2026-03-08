@@ -56,6 +56,10 @@ class ScenarioExpected(BaseModel):
     expected_stream_message_count: Optional[int] = None
     # If set, at least one streamed bubble must contain each substring.
     stream_bubbles_must_contain: List[str] = Field(default_factory=list)
+    # If set, the first streamed bubble must contain this substring.
+    first_stream_bubble_must_contain: Optional[str] = None
+    # If set, the first streamed bubble must be no longer than this many characters.
+    max_first_stream_bubble_chars: Optional[int] = None
 
 
 class Scenario(BaseModel):

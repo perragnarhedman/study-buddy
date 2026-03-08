@@ -1,0 +1,18 @@
+{
+  "scenario_id": "bstream-007",
+  "title": "Backend stream: Swedish overview should mention multiple subjects across bubbles",
+  "language": "sv",
+  "constraints": { "max_turns": 1 },
+  "assignments": [
+    { "id": "a1", "title": "Matte: kapitel 5", "courseName": "Math", "dueDate": "2026-02-10", "description": null, "estimatedMinutes": 35 },
+    { "id": "a2", "title": "Historia: frågor", "courseName": "History", "dueDate": "2026-02-12", "description": null, "estimatedMinutes": 40 },
+    { "id": "a3", "title": "Engelska: skrivuppgift", "courseName": "English", "dueDate": "2026-02-14", "description": null, "estimatedMinutes": 45 }
+  ],
+  "initial_user_message": "Vad har jag på gång just nu?",
+  "expected": {
+    "require_no_selection": true,
+    "expected_reply_language": "sv",
+    "min_stream_message_count": 3,
+    "stream_bubbles_must_contain": ["Matte", "Historia", "Engelska"]
+  }
+}

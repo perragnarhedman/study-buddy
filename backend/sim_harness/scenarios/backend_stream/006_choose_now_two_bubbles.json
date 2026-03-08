@@ -1,0 +1,16 @@
+{
+  "scenario_id": "bstream-006",
+  "title": "Backend stream: choosing a task now should produce at least two bubbles",
+  "language": "en",
+  "constraints": { "max_turns": 1 },
+  "assignments": [
+    { "id": "a1", "title": "Math worksheet", "courseName": "Math", "dueDate": "2026-02-10", "description": null, "estimatedMinutes": 20 },
+    { "id": "a2", "title": "History reading", "courseName": "History", "dueDate": "2026-02-14", "description": null, "estimatedMinutes": 35 }
+  ],
+  "initial_user_message": "What should I do now?",
+  "expected": {
+    "require_any_selection": true,
+    "expected_reply_language": "en",
+    "min_stream_message_count": 2
+  }
+}

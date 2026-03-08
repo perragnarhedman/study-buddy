@@ -101,3 +101,39 @@ def test_backend_runner_enforces_stream_bubble_expectations(monkeypatch, tmp_pat
     assert out["aggregate"]["failed"] >= 1
     failures = out["results"][0]["failures"]
     assert "stream_message_count_below_minimum" in failures
+
+
+def test_backend_runner_enforces_first_stream_bubble_expectations(monkeypatch, tmp_path) -> None:
+    import sim_harness.backend_runner as backend_runner
+    from sim_harness.backend_sut import BackendTurnResult
+
+    async def fake_install():
+        return None
+
+    async def fake_stream_turn(**kwargs):
+        return BackendTurnResult(
+            assistant_text="Long opener bubble\n\nMath next",
+            assistant_bubbles=["Hello there, here is your overview", "Math next"],
+            selected_assignment_id=None,
+            marked_done_assignment_ids=[],
+            raw_response_json={"events": [{"type": "message_completed"}]},
+        )
+
+    monkeypatch.setattr(backend_runner, "_install_deterministic_coach", fake_install)
+    monkeypatch.setattr(backend_runner, "run_backend_inprocess_stream_turn", fake_stream_turn)
+    monkeypatch.setattr(backend_runner, "prepare_backend_env", lambda **kwargs: ("db", tmp_path / "fixture.json"))
+
+    out = asyncio.run(
+        run_backend_integration_suite(
+            suite="backend_stream",
+            output_dir=str(tmp_path / "sim_runs"),
+            max_turns=1,
+            use_openai_coach=False,
+            http_base_url="http://example.test",
+            session_token="token",
+        )
+    )
+    assert out["aggregate"]["failed"] >= 1
+    result = next(r for r in out["results"] if r["scenario_id"] == "bstream-004")
+    failures = result["failures"]
+    assert "first_stream_bubble_missing_expected_substring" in failures or "first_stream_bubble_too_long" in failures

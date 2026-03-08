@@ -38,6 +38,11 @@ from app.services.openai_client import (
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
+_INVALID_SELECTION_RETRY_NOTE = (
+    "If you set selected_assignment_id, it MUST be one of the candidate ids (or null). "
+    "Do not invent ids."
+)
+
 
 @dataclass
 class PreparedChatContext:
@@ -131,6 +136,53 @@ def _best_mark_done_candidate_id(*, user_text: str, candidates: list[dict]) -> O
     if len(scored) >= 2 and scored[1][0] == best_score:
         return None
     return best_id
+
+
+def _is_overview_request(text: str) -> bool:
+    t = (text or "").strip().lower()
+    return any(
+        phrase in t
+        for phrase in [
+            "what do i have",
+            "what else",
+            "what subjects",
+            "what's coming up",
+            "whats coming up",
+            "overview",
+            "vad har jag",
+            "vad har jag kvar",
+            "på gång",
+            "vilka ämnen",
+            "överblick",
+            "overblick",
+        ]
+    )
+
+
+def _is_specific_task_request(text: str) -> bool:
+    t = (text or "").strip().lower()
+    if not t or _is_overview_request(t):
+        return False
+    return any(
+        phrase in t
+        for phrase in [
+            "help me",
+            "start",
+            "continue",
+            "work on",
+            "do now",
+            "choose",
+            "pick",
+            "hjälp",
+            "hjalp",
+            "börja",
+            "borja",
+            "fortsätt",
+            "fortsatt",
+            "välj",
+            "valj",
+        ]
+    )
 
 def _update_rolling_summary(prev: str, user_text: str, assistant_text: str, *, max_chars: int = 1200) -> str:
     """
@@ -313,6 +365,9 @@ def _selected_assignment_id(
         pi = next((it for it in prepared.plan_items if it.id == decision.selected_plan_item_id), None)
         if pi and pi.sourceAssignmentId:
             selected_assignment_id = pi.sourceAssignmentId
+        elif decision.selected_plan_item_id in _candidate_ids(prepared):
+            # Some model responses still place an assignment id in the legacy field.
+            selected_assignment_id = decision.selected_plan_item_id
 
     if selected_assignment_id and selected_assignment_id not in _candidate_ids(prepared):
         if allow_invalid:
@@ -323,6 +378,16 @@ def _selected_assignment_id(
             )
             return None
         raise HTTPException(status_code=502, detail="OpenAI returned invalid selection")
+
+    if not selected_assignment_id and _is_specific_task_request(prepared.user_text):
+        inferred = _best_mark_done_candidate_id(
+            user_text=prepared.user_text,
+            candidates=prepared.candidates,
+        )
+        if inferred and inferred in _candidate_ids(prepared):
+            decision.selected_assignment_id = inferred
+            decision.selected_plan_item_id = None
+            return inferred
     return selected_assignment_id
 
 
@@ -332,6 +397,8 @@ def _has_invalid_selected_assignment(prepared: PreparedChatContext, decision: Co
         pi = next((it for it in prepared.plan_items if it.id == decision.selected_plan_item_id), None)
         if pi and pi.sourceAssignmentId:
             selected_assignment_id = pi.sourceAssignmentId
+        elif decision.selected_plan_item_id in _candidate_ids(prepared):
+            selected_assignment_id = decision.selected_plan_item_id
     return bool(selected_assignment_id and selected_assignment_id not in _candidate_ids(prepared))
 
 
@@ -344,6 +411,26 @@ def _attach_decision_metadata(attempts: list[dict[str, Any]], decision: CoachDec
             "mark_done_plan_item_id": getattr(decision, "mark_done_plan_item_id", None),
             "reply_language": getattr(decision, "reply_language", None),
         }
+
+
+async def _finalize_coach_decision(
+    prepared: PreparedChatContext,
+    decision: CoachDecision,
+    *,
+    retry_invalid_selection: Any = None,
+) -> tuple[CoachDecision, str | None]:
+    if _has_invalid_selected_assignment(prepared, decision):
+        if retry_invalid_selection is None:
+            logger.warning("chat_stream_invalid_selection user_id=%s", prepared.user_id)
+        else:
+            decision = await retry_invalid_selection(_INVALID_SELECTION_RETRY_NOTE)
+
+    selected_assignment_id = _selected_assignment_id(
+        prepared,
+        decision,
+        allow_invalid=retry_invalid_selection is None,
+    )
+    return decision, selected_assignment_id
 
 
 def _build_chat_response(
@@ -492,19 +579,18 @@ async def chat_send(
         logger.warning("chat_send_openai_unavailable error=%s", type(e).__name__)
         raise HTTPException(status_code=503, detail="OpenAI unavailable")
 
-    if _has_invalid_selected_assignment(prepared, decision):
-        try:
-            decision = await _call_coach(
-                "If you set selected_assignment_id, it MUST be one of the candidate ids (or null). Do not invent ids."
-            )
-        except (ValueError, ValidationError) as e:
-            logger.warning("chat_send_openai_invalid_json error=%s", type(e).__name__)
-            raise HTTPException(status_code=502, detail="OpenAI returned invalid JSON")
-        except (httpx.HTTPError, RuntimeError, TimeoutError) as e:
-            logger.warning("chat_send_openai_unavailable error=%s", type(e).__name__)
-            raise HTTPException(status_code=503, detail="OpenAI unavailable")
-
-    selected_assignment_id = _selected_assignment_id(prepared, decision, allow_invalid=False)
+    try:
+        decision, selected_assignment_id = await _finalize_coach_decision(
+            prepared,
+            decision,
+            retry_invalid_selection=_call_coach,
+        )
+    except (ValueError, ValidationError) as e:
+        logger.warning("chat_send_openai_invalid_json error=%s", type(e).__name__)
+        raise HTTPException(status_code=502, detail="OpenAI returned invalid JSON")
+    except (httpx.HTTPError, RuntimeError, TimeoutError) as e:
+        logger.warning("chat_send_openai_unavailable error=%s", type(e).__name__)
+        raise HTTPException(status_code=503, detail="OpenAI unavailable")
 
     return _build_chat_response(
         prepared,
@@ -555,7 +641,10 @@ async def chat_send_stream(
             raw_output = "".join(raw_output_parts).strip()
             attempts[-1]["raw_model_output"] = raw_output
             decision = CoachDecision.model_validate(_parse_json_object_relaxed(raw_output))
-            selected_assignment_id = _selected_assignment_id(prepared, decision, allow_invalid=True)
+            decision, selected_assignment_id = await _finalize_coach_decision(
+                prepared,
+                decision,
+            )
             response = _build_chat_response(
                 prepared,
                 decision,

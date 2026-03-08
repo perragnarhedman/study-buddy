@@ -300,6 +300,14 @@ async def run_backend_integration_suite(
                 if s and not any(s in bubble for bubble in last_assistant_bubbles):
                     failures.append("stream_bubbles_missing_expected_substring")
                     break
+        if sc.expected.first_stream_bubble_must_contain:
+            first_bubble = last_assistant_bubbles[0] if last_assistant_bubbles else ""
+            if sc.expected.first_stream_bubble_must_contain not in first_bubble:
+                failures.append("first_stream_bubble_missing_expected_substring")
+        if sc.expected.max_first_stream_bubble_chars is not None:
+            first_bubble = last_assistant_bubbles[0] if last_assistant_bubbles else ""
+            if len(first_bubble) > int(sc.expected.max_first_stream_bubble_chars):
+                failures.append("first_stream_bubble_too_long")
 
         ok = len(failures) == 0
         tw.write_summary(

@@ -3,7 +3,7 @@ STUDENT LATEST MESSAGE (highest priority):
 
 IMPORTANT:
 - Conversation history and summary may contain mistakes or earlier hallucinations.
-- Treat the Plan item candidates (and their fields) as the source of truth.
+- Treat the Assignment candidates (and their fields) as the source of truth.
 - If something isn’t explicitly present in the candidates (or assignment instructions), do not assume it.
 
 Rolling summary (may be empty):
@@ -15,11 +15,12 @@ Conversation so far (most recent last, may be empty):
 User state (JSON, may include last selection / preferences):
 {user_state_json}
 
-Plan item candidates (JSON array). Source of truth for what exists.
+Assignment candidates (JSON array). Source of truth for what exists.
 Usage rules:
 - Only set selected_assignment_id when you are recommending, continuing, or the student has chosen a specific assignment.
 - If you are greeting, clarifying, building rapport, or giving an overview of what’s coming up, set selected_assignment_id to null.
 - If the student asks “what else / what do I have / what subjects”, answer with an overview and keep selected_assignment_id = null.
+- If the student names a subject/task and exactly one candidate clearly matches, continue that assignment and keep selected_assignment_id set to that candidate.
 {plan_items_json}
 
 Write your response. The student should only experience assistant_text.
