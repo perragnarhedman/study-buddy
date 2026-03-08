@@ -29,7 +29,7 @@ final class AppStore: ObservableObject {
         return "http://127.0.0.1:8000"
 #else
         // Default for TestFlight/App Store: hosted backend (can be overridden via Info.plist).
-        return "https://study-buddy-backend.onrender.com"
+        return "https://study-buddy-rtvu.onrender.com"
 #endif
     }
 
