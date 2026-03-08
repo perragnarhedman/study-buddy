@@ -34,4 +34,9 @@ xcshareddata/
 backend/sim_runs/
 sim_runs/
 
+## Local artifacts
+.beads/export-state/
+.xcode-derived-data-tests/
+serverlogs/
+
 
