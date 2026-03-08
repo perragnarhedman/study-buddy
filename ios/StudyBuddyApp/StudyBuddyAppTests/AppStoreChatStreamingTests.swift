@@ -12,7 +12,7 @@ final class AppStoreChatStreamingTests: XCTestCase {
         )
         let store = AppStore(
             apiClientFactory: { _ in api },
-            sessionTokenProvider: { nil }
+            sessionTokenProvider: { "token" }
         )
         store.useStubData = false
 
@@ -30,7 +30,7 @@ final class AppStoreChatStreamingTests: XCTestCase {
         )
         let store = AppStore(
             apiClientFactory: { _ in api },
-            sessionTokenProvider: { nil }
+            sessionTokenProvider: { "token" }
         )
         store.useStubData = false
 
@@ -70,7 +70,7 @@ final class AppStoreChatStreamingTests: XCTestCase {
         )
         let store = AppStore(
             apiClientFactory: { _ in api },
-            sessionTokenProvider: { nil }
+            sessionTokenProvider: { "token" }
         )
         store.useStubData = false
 
@@ -100,7 +100,7 @@ final class AppStoreChatStreamingTests: XCTestCase {
         )
         let store = AppStore(
             apiClientFactory: { _ in api },
-            sessionTokenProvider: { nil }
+            sessionTokenProvider: { "token" }
         )
         store.useStubData = false
 
@@ -128,7 +128,7 @@ final class AppStoreChatStreamingTests: XCTestCase {
         )
         let store = AppStore(
             apiClientFactory: { _ in api },
-            sessionTokenProvider: { nil }
+            sessionTokenProvider: { "token" }
         )
         store.useStubData = false
 
@@ -162,7 +162,7 @@ final class AppStoreChatStreamingTests: XCTestCase {
         )
         let store = AppStore(
             apiClientFactory: { _ in api },
-            sessionTokenProvider: { nil }
+            sessionTokenProvider: { "token" }
         )
         store.useStubData = false
 
@@ -177,12 +177,35 @@ final class AppStoreChatStreamingTests: XCTestCase {
             ]
         )
     }
+
+    func testUnsignedStoreStartsInIntroModeAndUsesIntroChatMode() async {
+        let api = MockChatAPIClient(
+            streamEvents: [
+                .init(type: .typingStarted, messageId: nil, delta: nil, bestNextAction: nil, message: nil),
+                .init(type: .turnCompleted, messageId: nil, delta: nil, bestNextAction: nil, message: nil),
+            ]
+        )
+        let store = AppStore(
+            apiClientFactory: { _ in api },
+            sessionTokenProvider: { nil }
+        )
+        store.useStubData = false
+
+        XCTAssertEqual(store.messages.first?.role, .assistant)
+        XCTAssertTrue(store.messages.first?.text.contains("Connect Google Classroom") ?? false)
+
+        await store.sendUserMessage("What can you help with?")
+
+        XCTAssertEqual(api.sendChatStreamCalls.map(\.chatMode), [.intro])
+        XCTAssertEqual(api.sendChatStreamCalls.map(\.visibleChatIsEmpty), [true])
+    }
 }
 
 private final class MockChatAPIClient: ChatAPIClient {
     struct ChatCall: Equatable {
         let userMessage: String
         let visibleChatIsEmpty: Bool
+        let chatMode: ChatMode
     }
 
     private let streamEvents: [ChatStreamEvent]
@@ -204,13 +227,23 @@ private final class MockChatAPIClient: ChatAPIClient {
         self.fallbackResponse = fallbackResponse
     }
 
-    func sendChat(userMessage: String, visibleChatIsEmpty: Bool, sessionToken: String?) async throws -> ChatSendResponse {
-        sendChatCalls.append(.init(userMessage: userMessage, visibleChatIsEmpty: visibleChatIsEmpty))
+    func sendChat(
+        userMessage: String,
+        visibleChatIsEmpty: Bool,
+        chatMode: ChatMode,
+        sessionToken: String?
+    ) async throws -> ChatSendResponse {
+        sendChatCalls.append(.init(userMessage: userMessage, visibleChatIsEmpty: visibleChatIsEmpty, chatMode: chatMode))
         return fallbackResponse
     }
 
-    func sendChatStream(userMessage: String, visibleChatIsEmpty: Bool, sessionToken: String?) -> AsyncThrowingStream<ChatStreamEvent, Error> {
-        sendChatStreamCalls.append(.init(userMessage: userMessage, visibleChatIsEmpty: visibleChatIsEmpty))
+    func sendChatStream(
+        userMessage: String,
+        visibleChatIsEmpty: Bool,
+        chatMode: ChatMode,
+        sessionToken: String?
+    ) -> AsyncThrowingStream<ChatStreamEvent, Error> {
+        sendChatStreamCalls.append(.init(userMessage: userMessage, visibleChatIsEmpty: visibleChatIsEmpty, chatMode: chatMode))
         AsyncThrowingStream { continuation in
             if let streamError {
                 continuation.finish(throwing: streamError)

@@ -139,6 +139,18 @@ async def plan_week(assignments_json: str, week_start: str) -> str:
     )
 
 
+def _build_prompt(
+    *,
+    system_name: str,
+    user_name: str,
+    variables: dict[str, str],
+) -> str:
+    system_prompt = load_text(system_name)
+    user_prompt_template = load_text(user_name)
+    user_prompt = render_template(user_prompt_template, variables)
+    return f"{system_prompt}\n\n{user_prompt}\n"
+
+
 async def coach_decide(
     *,
     user_message: str,
@@ -179,11 +191,10 @@ async def coach_decide_with_raw(
     if not settings.openai_api_key:
         raise RuntimeError("OPENAI_API_KEY missing")
 
-    system_prompt = load_text("coach_system.txt")
-    user_prompt_template = load_text("coach_user.txt")
-    user_prompt = render_template(
-        user_prompt_template,
-        {
+    prompt = _build_prompt(
+        system_name="coach_system.txt",
+        user_name="coach_user.txt",
+        variables={
             "user_message": user_message,
             "plan_items_json": plan_items_json,
             "reference_assignments_json": reference_assignments_json,
@@ -193,7 +204,6 @@ async def coach_decide_with_raw(
             "visible_chat_is_empty": json.dumps(bool(visible_chat_is_empty)),
         },
     )
-    prompt = f"{system_prompt}\n\n{user_prompt}\n"
 
     raw = await _responses_text(
         model=settings.openai_chat_model,
@@ -215,11 +225,10 @@ def build_coach_prompt(
     user_state_json: str = "",
     visible_chat_is_empty: bool = False,
 ) -> str:
-    system_prompt = load_text("coach_system.txt")
-    user_prompt_template = load_text("coach_user.txt")
-    user_prompt = render_template(
-        user_prompt_template,
-        {
+    return _build_prompt(
+        system_name="coach_system.txt",
+        user_name="coach_user.txt",
+        variables={
             "user_message": user_message,
             "plan_items_json": plan_items_json,
             "reference_assignments_json": reference_assignments_json,
@@ -229,7 +238,57 @@ def build_coach_prompt(
             "visible_chat_is_empty": json.dumps(bool(visible_chat_is_empty)),
         },
     )
-    return f"{system_prompt}\n\n{user_prompt}\n"
+
+
+async def intro_decide(
+    *,
+    user_message: str,
+    visible_chat_is_empty: bool = False,
+) -> CoachDecision:
+    decision, _raw = await intro_decide_with_raw(
+        user_message=user_message,
+        visible_chat_is_empty=visible_chat_is_empty,
+    )
+    return decision
+
+
+async def intro_decide_with_raw(
+    *,
+    user_message: str,
+    visible_chat_is_empty: bool = False,
+) -> tuple[CoachDecision, str]:
+    settings = get_settings()
+    if not settings.openai_api_key:
+        raise RuntimeError("OPENAI_API_KEY missing")
+
+    prompt = build_intro_prompt(
+        user_message=user_message,
+        visible_chat_is_empty=visible_chat_is_empty,
+    )
+
+    raw = await _responses_text(
+        model=settings.openai_chat_model,
+        prompt=prompt,
+        timeout_seconds=settings.openai_chat_timeout_seconds,
+        api_key=settings.openai_api_key,
+    )
+    obj = _parse_json_object_relaxed(raw)
+    return CoachDecision.model_validate(obj), raw
+
+
+def build_intro_prompt(
+    *,
+    user_message: str,
+    visible_chat_is_empty: bool = False,
+) -> str:
+    return _build_prompt(
+        system_name="intro_system.txt",
+        user_name="intro_user.txt",
+        variables={
+            "user_message": user_message,
+            "visible_chat_is_empty": json.dumps(bool(visible_chat_is_empty)),
+        },
+    )
 
 
 async def coach_stream_raw_events(
@@ -253,6 +312,29 @@ async def coach_stream_raw_events(
         conversation_history=conversation_history,
         conversation_summary=conversation_summary,
         user_state_json=user_state_json,
+        visible_chat_is_empty=visible_chat_is_empty,
+    )
+
+    async for event in _responses_stream_events(
+        model=settings.openai_chat_model,
+        prompt=prompt,
+        timeout_seconds=settings.openai_chat_timeout_seconds,
+        api_key=settings.openai_api_key,
+    ):
+        yield event
+
+
+async def intro_stream_raw_events(
+    *,
+    user_message: str,
+    visible_chat_is_empty: bool = False,
+) -> AsyncIterator[dict]:
+    settings = get_settings()
+    if not settings.openai_api_key:
+        raise RuntimeError("OPENAI_API_KEY missing")
+
+    prompt = build_intro_prompt(
+        user_message=user_message,
         visible_chat_is_empty=visible_chat_is_empty,
     )
 

@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field
 
 Role = Literal["user", "assistant"]
 PlanStatus = Literal["todo", "doing", "done"]
+ChatMode = Literal["coach", "intro"]
 
 class AttachmentLink(BaseModel):
     title: str
@@ -72,6 +73,7 @@ class ChatSendRequest(BaseModel):
     user_message: str
     current_plan: Optional[WeeklyPlan] = None
     visible_chat_is_empty: bool = False
+    chat_mode: ChatMode = "coach"
 
 
 class ChatSendResponse(BaseModel):

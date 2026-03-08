@@ -29,7 +29,7 @@ struct DebugSettingsView: View {
 #endif
 
                 Section("Google Classroom") {
-                    Button("Connect Google Classroom") {
+                    Button("Sign in to Google Classroom") {
                         Task { await connectGoogle() }
                     }
                     .disabled(store.useStubData)
@@ -41,7 +41,13 @@ struct DebugSettingsView: View {
                         Text(authStatus)
                             .foregroundStyle(.secondary)
                     } else {
-                        Text("Not connected yet")
+                        Text("Not signed in yet")
+                            .foregroundStyle(.secondary)
+                    }
+
+                    if store.classroomAssignmentsImported == nil {
+                        Text("Use this to connect your assignments to Study Buddy.")
+                            .font(.footnote)
                             .foregroundStyle(.secondary)
                     }
 

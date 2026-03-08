@@ -35,13 +35,20 @@ struct PlanItem: Identifiable, Codable, Equatable {
     }
 }
 
+enum ChatMode: String, Codable, Equatable {
+    case coach
+    case intro
+}
+
 struct ChatSendRequest: Codable {
     let userMessage: String
     let visibleChatIsEmpty: Bool
+    let chatMode: ChatMode
 
     enum CodingKeys: String, CodingKey {
         case userMessage = "user_message"
         case visibleChatIsEmpty = "visible_chat_is_empty"
+        case chatMode = "chat_mode"
     }
 }
 

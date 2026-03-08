@@ -27,6 +27,13 @@ struct ChatView: View {
                     .padding(.horizontal, 12)
                     .padding(.vertical, 8)
             }
+            if store.isIntroMode {
+                Text("Sign in from Settings to connect Google Classroom.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+            }
             messagesList
             Divider()
             inputBar
@@ -89,7 +96,7 @@ struct ChatView: View {
 
     private var inputBar: some View {
         HStack(spacing: 10) {
-            TextField("What are you working on?", text: $draft, axis: .vertical)
+            TextField(store.isIntroMode ? "Ask what Study Buddy can do" : "What are you working on?", text: $draft, axis: .vertical)
                 .lineLimit(1...4)
                 .textInputAutocapitalization(.sentences)
                 .autocorrectionDisabled(false)

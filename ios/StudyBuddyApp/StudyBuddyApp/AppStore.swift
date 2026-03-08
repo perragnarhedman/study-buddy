@@ -14,12 +14,18 @@ final class AppStore: ObservableObject {
     @Published var chatInfoMessage: String? = nil
     @Published var authErrorMessage: String? = nil
     @Published var isAssistantTyping: Bool = false
+    @Published private(set) var isSignedIn: Bool
 
     private let sessionTokenKey = "studybuddy.sessionToken"
+    private static let introWelcomeMessageID = "intro-welcome"
+    private static let introWelcomeMessageText =
+        "Hi! I'm Study Buddy.\n\nI can explain what Study Buddy is, share a few examples of how it helps with schoolwork, and show you how to sign in when you're ready.\n\nTo use your own assignments, open Settings and choose Connect Google Classroom."
     private let apiClientFactory: (String) -> ChatAPIClient
     private let sessionTokenProvider: () -> String?
     private var coalescedStreamMessageIDs: Set<String> = []
     var sessionToken: String? { sessionTokenProvider() }
+    var chatMode: ChatMode { isSignedIn ? .coach : .intro }
+    var isIntroMode: Bool { !useStubData && !isSignedIn }
 
     init(
         apiClientFactory: @escaping (String) -> ChatAPIClient = { APIClient(baseURLString: $0) },
@@ -27,9 +33,11 @@ final class AppStore: ObservableObject {
     ) {
         self.apiClientFactory = apiClientFactory
         self.sessionTokenProvider = sessionTokenProvider
+        self.isSignedIn = sessionTokenProvider() != nil
         // If an older build saved a localhost baseURL, move it to the current default.
         // This makes upgrades (and simulator reinstalls) behave consistently.
         migrateSavedDefaultsIfNeeded()
+        seedIntroConversationIfNeeded()
     }
 
     static var defaultBaseURL: String {
@@ -78,6 +86,23 @@ final class AppStore: ObservableObject {
 
     private var api: ChatAPIClient { apiClientFactory(baseURL) }
 
+    private var hasOnlyIntroWelcomeMessage: Bool {
+        messages.count == 1 && messages[0].id == Self.introWelcomeMessageID && messages[0].role == .assistant
+    }
+
+    private func seedIntroConversationIfNeeded() {
+        guard isIntroMode else { return }
+        guard messages.isEmpty else { return }
+        messages = [
+            ChatMessage(
+                id: Self.introWelcomeMessageID,
+                role: .assistant,
+                text: Self.introWelcomeMessageText,
+                timestamp: Self.isoNow()
+            )
+        ]
+    }
+
     func resetConversation() async {
         guard !useStubData else {
             messages = []
@@ -110,6 +135,13 @@ final class AppStore: ObservableObject {
 
     func saveSessionToken(_ token: String) {
         Keychain.setString(token, forKey: sessionTokenKey)
+        isSignedIn = true
+        messages = []
+        bestNextActionFromChat = nil
+        chatErrorMessage = nil
+        chatInfoMessage = nil
+        authErrorMessage = nil
+        isAssistantTyping = false
     }
 
     func refreshClassroomAssignmentsImportedCount() async {
@@ -121,6 +153,7 @@ final class AppStore: ObservableObject {
         guard let token = sessionToken else {
             classroomAssignmentsImported = nil
             classroomAssignments = []
+            authErrorMessage = nil
             return
         }
         do {
@@ -140,7 +173,8 @@ final class AppStore: ObservableObject {
     func sendUserMessage(_ text: String) async {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
-        let visibleChatWasEmpty = messages.isEmpty
+        let activeChatMode = chatMode
+        let visibleChatWasEmpty = messages.isEmpty || (activeChatMode == .intro && hasOnlyIntroWelcomeMessage)
 
         let userMsg = ChatMessage(
             id: UUID().uuidString,
@@ -170,6 +204,7 @@ final class AppStore: ObservableObject {
                 api.sendChatStream(
                     userMessage: trimmed,
                     visibleChatIsEmpty: visibleChatWasEmpty,
+                    chatMode: activeChatMode,
                     sessionToken: sessionToken
                 )
             )
@@ -183,6 +218,7 @@ final class AppStore: ObservableObject {
                     let fallback = try await api.sendChat(
                         userMessage: trimmed,
                         visibleChatIsEmpty: visibleChatWasEmpty,
+                        chatMode: activeChatMode,
                         sessionToken: sessionToken
                     )
                     bestNextActionFromChat = fallback.bestNextAction
@@ -192,12 +228,12 @@ final class AppStore: ObservableObject {
                     isAssistantTyping = false
                     return
                 } catch {
-                    handleChatFailure(error, assistantCountBefore: assistantCountBefore)
+                    handleChatFailure(error, assistantCountBefore: assistantCountBefore, chatMode: activeChatMode)
                     return
                 }
             }
 
-            handleChatFailure(streamError, assistantCountBefore: assistantCountBefore)
+            handleChatFailure(streamError, assistantCountBefore: assistantCountBefore, chatMode: activeChatMode)
         }
     }
 
@@ -245,7 +281,7 @@ final class AppStore: ObservableObject {
         }
     }
 
-    private func handleChatFailure(_ error: Error, assistantCountBefore: Int) {
+    private func handleChatFailure(_ error: Error, assistantCountBefore: Int, chatMode: ChatMode) {
         bestNextActionFromChat = nil
         isAssistantTyping = false
 
@@ -263,12 +299,20 @@ final class AppStore: ObservableObject {
                 assistantCountBefore: assistantCountBefore
             )
         } else if let apiError = error as? APIError, case .unauthorized = apiError {
-            authErrorMessage = "Please sign in to use Study Buddy."
-            chatErrorMessage = "Please sign in (Settings → Connect Google Classroom)."
-            appendAssistantErrorIfNeeded(
-                "Please sign in to continue (Settings → Connect Google Classroom).",
-                assistantCountBefore: assistantCountBefore
-            )
+            if chatMode == .intro {
+                chatErrorMessage = "Sign-in is available from Settings."
+                appendAssistantErrorIfNeeded(
+                    "You can sign in from Settings whenever you're ready.",
+                    assistantCountBefore: assistantCountBefore
+                )
+            } else {
+                authErrorMessage = "Please sign in to use Study Buddy."
+                chatErrorMessage = "Please sign in (Settings → Connect Google Classroom)."
+                appendAssistantErrorIfNeeded(
+                    "Please sign in to continue (Settings → Connect Google Classroom).",
+                    assistantCountBefore: assistantCountBefore
+                )
+            }
         } else if let apiError = error as? APIError, case .badStatus(let code) = apiError {
             chatErrorMessage = "Backend returned an error (\(code))."
             appendAssistantErrorIfNeeded(

@@ -34,6 +34,8 @@ from app.services.openai_client import (
     coach_decide,
     coach_decide_with_raw,
     coach_stream_raw_events,
+    intro_decide,
+    intro_stream_raw_events,
 )
 
 router = APIRouter()
@@ -335,6 +337,23 @@ def _require_openai() -> None:
     settings = get_settings()
     if not settings.openai_api_key:
         raise HTTPException(status_code=503, detail="OpenAI unavailable")
+
+
+def _normalize_intro_decision(decision: CoachDecision) -> CoachDecision:
+    decision.selected_assignment_id = None
+    decision.reopen_assignment_id = None
+    decision.mark_done_assignment_id = None
+    decision.selected_plan_item_id = None
+    decision.mark_done_plan_item_id = None
+    return decision
+
+
+def _build_intro_chat_response(decision: CoachDecision) -> ChatSendResponse:
+    text = (decision.assistant_text or "").strip()
+    if not text:
+        raise HTTPException(status_code=502, detail="OpenAI returned empty response")
+    assistant_message = ChatMessage(id=new_id(), role="assistant", text=text, timestamp=iso_now())
+    return ChatSendResponse(assistant_message=assistant_message, best_next_action=None)
 
 
 def _detect_lang_hint(s: str) -> str:
@@ -879,8 +898,11 @@ async def chat_send(
     x_client_platform: Optional[str] = Header(default=None, alias="X-Client-Platform"),
     x_app_version: Optional[str] = Header(default=None, alias="X-App-Version"),
     x_app_build: Optional[str] = Header(default=None, alias="X-App-Build"),
-    ctx: AuthContext = Depends(require_user_id),
+    authorization: Optional[str] = Header(default=None),
 ) -> ChatSendResponse:
+    if payload.chat_mode == "intro":
+        return await _chat_send_intro_impl(payload)
+    ctx = require_user_id(authorization)
     return await _chat_send_impl(
         payload,
         ctx=ctx,
@@ -890,6 +912,28 @@ async def chat_send(
         app_version=x_app_version,
         app_build=x_app_build,
     )
+
+
+async def _chat_send_intro_impl(payload: ChatSendRequest) -> ChatSendResponse:
+    _require_openai()
+    user_message = (payload.user_message or "").strip()
+    if not user_message:
+        logger.warning("chat_intro_send_400 user_message_required")
+        raise HTTPException(status_code=400, detail="user_message required")
+
+    try:
+        decision = await intro_decide(
+            user_message=user_message,
+            visible_chat_is_empty=payload.visible_chat_is_empty,
+        )
+    except (ValueError, ValidationError) as e:
+        logger.warning("chat_intro_send_invalid_json error=%s", type(e).__name__)
+        raise HTTPException(status_code=502, detail="OpenAI returned invalid JSON")
+    except (httpx.HTTPError, RuntimeError, TimeoutError) as e:
+        logger.warning("chat_intro_send_openai_unavailable error=%s", type(e).__name__)
+        raise HTTPException(status_code=503, detail="OpenAI unavailable")
+
+    return _build_intro_chat_response(_normalize_intro_decision(decision))
 
 
 async def _chat_send_impl(
@@ -990,8 +1034,11 @@ async def chat_send_stream(
     x_client_platform: Optional[str] = Header(default=None, alias="X-Client-Platform"),
     x_app_version: Optional[str] = Header(default=None, alias="X-App-Version"),
     x_app_build: Optional[str] = Header(default=None, alias="X-App-Build"),
-    ctx: AuthContext = Depends(require_user_id),
+    authorization: Optional[str] = Header(default=None),
 ) -> StreamingResponse:
+    if payload.chat_mode == "intro":
+        return _chat_send_intro_stream(payload)
+    ctx = require_user_id(authorization)
     _require_openai()
     prepared = await _prepare_chat_context(
         payload,
@@ -1073,6 +1120,57 @@ async def chat_send_stream(
             yield _stream_event({"type": "error", "message": "OpenAI returned invalid JSON"})
         except (httpx.HTTPError, RuntimeError, TimeoutError) as e:
             logger.warning("chat_send_stream_openai_unavailable error=%s", type(e).__name__)
+            for bubble_event in formatter.finish():
+                yield _stream_event(bubble_event)
+            yield _stream_event({"type": "error", "message": "OpenAI unavailable"})
+
+    return StreamingResponse(event_stream(), media_type="application/x-ndjson")
+
+
+def _chat_send_intro_stream(payload: ChatSendRequest) -> StreamingResponse:
+    _require_openai()
+    user_message = (payload.user_message or "").strip()
+    if not user_message:
+        raise HTTPException(status_code=400, detail="user_message required")
+
+    async def event_stream():
+        parser = AssistantTextJSONStreamParser()
+        formatter = BubbleStreamFormatter()
+        raw_output_parts: list[str] = []
+
+        yield _stream_event({"type": "typing_started"})
+
+        try:
+            async for event in intro_stream_raw_events(
+                user_message=user_message,
+                visible_chat_is_empty=payload.visible_chat_is_empty,
+            ):
+                if event.get("type") != "response.output_text.delta":
+                    continue
+                raw_delta = str(event.get("delta") or "")
+                if not raw_delta:
+                    continue
+                raw_output_parts.append(raw_delta)
+                assistant_delta = parser.feed(raw_delta)
+                if not assistant_delta:
+                    continue
+                for bubble_event in formatter.feed(assistant_delta):
+                    yield _stream_event(bubble_event)
+
+            raw_output = "".join(raw_output_parts).strip()
+            decision = CoachDecision.model_validate(_parse_json_object_relaxed(raw_output))
+            _build_intro_chat_response(_normalize_intro_decision(decision))
+
+            for bubble_event in formatter.finish():
+                yield _stream_event(bubble_event)
+            yield _stream_event({"type": "turn_completed"})
+        except (ValueError, ValidationError) as e:
+            logger.warning("chat_intro_stream_invalid_json error=%s", type(e).__name__)
+            for bubble_event in formatter.finish():
+                yield _stream_event(bubble_event)
+            yield _stream_event({"type": "error", "message": "OpenAI returned invalid JSON"})
+        except (httpx.HTTPError, RuntimeError, TimeoutError) as e:
+            logger.warning("chat_intro_stream_openai_unavailable error=%s", type(e).__name__)
             for bubble_event in formatter.finish():
                 yield _stream_event(bubble_event)
             yield _stream_event({"type": "error", "message": "OpenAI unavailable"})

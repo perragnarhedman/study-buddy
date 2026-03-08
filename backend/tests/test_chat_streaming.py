@@ -141,6 +141,52 @@ def test_chat_send_stream_emits_error_event(monkeypatch, tmp_path) -> None:
     assert events[-1] == {"type": "error", "message": "OpenAI unavailable"}
 
 
+def test_chat_send_stream_intro_works_without_token(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    monkeypatch.setenv("SESSION_SECRET", "test-secret")
+    monkeypatch.setenv("SQLITE_PATH", str(tmp_path / "test.db"))
+    get_settings.cache_clear()
+
+    import app.routes.chat as chat_route
+
+    raw = json.dumps(
+        {
+            "assistant_text": "Hi!\n\nI can explain what Study Buddy does.\n\nOpen Settings when you want to sign in.",
+            "selected_assignment_id": None,
+            "reopen_assignment_id": None,
+            "mark_done_assignment_id": None,
+            "selected_plan_item_id": None,
+            "mark_done_plan_item_id": None,
+            "reply_language": "en",
+        },
+        ensure_ascii=False,
+    )
+
+    async def fake_stream_events(**kwargs):
+        for idx in range(0, len(raw), 16):
+            yield {"type": "response.output_text.delta", "delta": raw[idx : idx + 16]}
+
+    monkeypatch.setattr(chat_route, "intro_stream_raw_events", fake_stream_events)
+
+    client = TestClient(app)
+
+    with client.stream(
+        "POST",
+        "/chat/send_stream",
+        json={
+            "user_message": "Hi",
+            "chat_mode": "intro",
+            "visible_chat_is_empty": True,
+        },
+    ) as response:
+        assert response.status_code == 200
+        events = [json.loads(line) for line in response.iter_lines() if line]
+
+    assert events[0]["type"] == "typing_started"
+    assert events[-1]["type"] == "turn_completed"
+    assert not any(event["type"] == "best_next_action" for event in events)
+
+
 def test_bubble_stream_formatter_splits_subject_blocks_and_crlf() -> None:
     formatter = BubbleStreamFormatter()
 

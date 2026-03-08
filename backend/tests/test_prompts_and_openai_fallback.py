@@ -64,13 +64,22 @@ def test_prompts_can_format_without_missing_keys() -> None:
             "visible_chat_is_empty": "false",
         },
     )
+    intro_user = render_template(
+        load_text("intro_user.txt"),
+        {
+            "user_message": "Hi",
+            "visible_chat_is_empty": "true",
+        },
+    )
     plan_user = render_template(
         load_text("plan_user.txt"),
         {"week_start": "2026-01-13", "assignments_json": "[]"},
     )
     # Smoke check: placeholders were replaced and JSON braces didn't break templating.
     assert "Help me" in user
+    assert "Hi" in intro_user
     assert "{plan_items_json}" not in user
+    assert "{visible_chat_is_empty}" not in intro_user
     assert "Decision JSON schema" in system
     assert "{week_start}" not in plan_user
     assert "{assignments_json}" not in plan_user
