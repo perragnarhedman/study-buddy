@@ -176,6 +176,36 @@ def test_bubble_stream_formatter_splits_subject_blocks_and_crlf() -> None:
     ]
 
 
+def test_bubble_stream_formatter_merges_weak_punctuation_fragment() -> None:
+    formatter = BubbleStreamFormatter()
+
+    chunks = [
+        "Jag kan inte kolla det säkert här utan en pålitlig källa.\n\n",
+        ").\n\nMen om du menar resultatet kan jag inte bekräfta det.",
+    ]
+
+    events: list[dict] = []
+    for chunk in chunks:
+        events.extend(formatter.feed(chunk))
+    events.extend(formatter.finish())
+
+    messages_by_id: dict[str, str] = {}
+    completion_order: list[str] = []
+    for event in events:
+        if event["type"] == "message_started":
+            messages_by_id[event["message_id"]] = ""
+        elif event["type"] == "message_delta":
+            messages_by_id[event["message_id"]] += event["delta"]
+        elif event["type"] == "message_completed":
+            completion_order.append(event["message_id"])
+
+    completed_messages = [messages_by_id[mid] for mid in completion_order]
+    assert completed_messages == [
+        "Jag kan inte kolla det säkert här utan en pålitlig källa.).",
+        "Men om du menar resultatet kan jag inte bekräfta det.",
+    ]
+
+
 def test_chat_send_stream_infers_named_assignment_when_model_leaves_selection_null(
     monkeypatch, tmp_path
 ) -> None:

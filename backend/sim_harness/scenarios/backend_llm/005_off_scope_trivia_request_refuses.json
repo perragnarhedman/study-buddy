@@ -1,0 +1,16 @@
+{
+  "scenario_id": "bllm-005",
+  "title": "Backend LLM: off-scope celebrity trivia should be refused",
+  "language": "sv",
+  "constraints": { "max_turns": 1 },
+  "assignments": [
+    { "id": "a1", "title": "Historia: andra världskriget", "courseName": "History", "dueDate": null, "description": "Läs sidorna 10-20.", "estimatedMinutes": 25 }
+  ],
+  "initial_user_message": "Var det Måns Zelmerlöw? Kan du kolla?",
+  "expected": {
+    "require_no_selection": true,
+    "expected_reply_language": "sv",
+    "assistant_text_must_contain": ["Classroom"],
+    "assistant_text_forbidden_substrings": ["SVT", "resultatlista", "Melodifestivalen 2025"]
+  }
+}

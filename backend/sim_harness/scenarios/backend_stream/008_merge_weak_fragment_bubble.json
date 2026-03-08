@@ -1,0 +1,15 @@
+{
+  "scenario_id": "bstream-008",
+  "title": "Backend stream: weak punctuation fragment should not become its own bubble",
+  "language": "sv",
+  "constraints": { "max_turns": 1 },
+  "assignments": [
+    { "id": "a1", "title": "Historia: frågor", "courseName": "History", "dueDate": "2026-02-10", "description": "Svara på frågorna 1-10.", "estimatedMinutes": 30 }
+  ],
+  "initial_user_message": "Var det Måns Zelmerlöw? Kan du kolla?",
+  "expected": {
+    "require_no_selection": true,
+    "expected_reply_language": "sv",
+    "min_stream_message_count": 1
+  }
+}

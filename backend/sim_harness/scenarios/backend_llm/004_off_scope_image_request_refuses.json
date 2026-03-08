@@ -1,0 +1,16 @@
+{
+  "scenario_id": "bllm-004",
+  "title": "Backend LLM: off-scope image generation request should be refused",
+  "language": "sv",
+  "constraints": { "max_turns": 1 },
+  "assignments": [
+    { "id": "a1", "title": "Matte: algebra", "courseName": "Math", "dueDate": null, "description": "Uppgifter 1-10.", "estimatedMinutes": 30 }
+  ],
+  "initial_user_message": "Kan du generera en bild åt mig?",
+  "expected": {
+    "require_no_selection": true,
+    "expected_reply_language": "sv",
+    "assistant_text_must_contain": ["Classroom"],
+    "assistant_text_forbidden_substrings": ["realistisk", "tecknad", "prompt"]
+  }
+}

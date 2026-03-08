@@ -7,6 +7,7 @@ from uuid import uuid4
 
 _SHORT_OPENER_RE = re.compile(r"^\s*([^\n]{1,60}?[.!?])(?:\s+)(?=\S)")
 _PARAGRAPH_BREAK_RE = re.compile(r"\n[ \t]*\n+")
+_WEAK_FRAGMENT_RE = re.compile(r'^[\s\)\]\}"\'»”’.,:;!?…-]{1,6}$')
 _SUBJECT_BULLET_BOUNDARY_RE = re.compile(
     r"\n(?=[•*-]\s*(?:Math|History|English|Matte|Historia|Engelska)\s*:)",
     re.IGNORECASE,
@@ -157,6 +158,9 @@ class BubbleStreamFormatter:
                     self.waiting_for_first_boundary = False
                     break
 
+                if self.pending_text.endswith("\n"):
+                    break
+
                 if len(self.pending_text.strip()) < 80:
                     break
 
@@ -194,14 +198,20 @@ class BubbleStreamFormatter:
         rest = self.pending_text[match.end() :].lstrip()
         if not opener:
             return None
+        leading_fragment, _remaining = self._split_leading_paragraph(rest)
+        if self._is_weak_fragment(leading_fragment):
+            return None
         return opener, rest
 
     def _consume_paragraph_boundary(self) -> tuple[str, str] | None:
         match = _PARAGRAPH_BREAK_RE.search(self.pending_text)
         if match is None:
             return None
+        if match.end() >= len(self.pending_text):
+            return None
         segment = self.pending_text[: match.start()].strip()
         rest = self.pending_text[match.end() :].lstrip("\n")
+        segment, rest = self._merge_weak_leading_fragment(segment, rest)
         return segment, rest
 
     def _consume_subject_bullet_boundary(self) -> tuple[str, str] | None:
@@ -224,6 +234,30 @@ class BubbleStreamFormatter:
         paragraph_len = len(paragraph_split[0])
         bullet_len = len(bullet_split[0])
         return paragraph_split if paragraph_len <= bullet_len else bullet_split
+
+    def _merge_weak_leading_fragment(self, segment: str, rest: str) -> tuple[str, str]:
+        fragment, remaining = self._split_leading_paragraph(rest)
+        if not self._is_weak_fragment(fragment):
+            return segment, rest
+        merged = f"{segment}{fragment}".strip() if segment else fragment
+        return merged, remaining
+
+    def _split_leading_paragraph(self, text: str) -> tuple[str, str]:
+        trimmed = text.lstrip("\n")
+        if not trimmed:
+            return "", ""
+        match = _PARAGRAPH_BREAK_RE.search(trimmed)
+        if match is None:
+            return trimmed.strip(), ""
+        fragment = trimmed[: match.start()].strip()
+        remaining = trimmed[match.end() :].lstrip("\n")
+        return fragment, remaining
+
+    def _is_weak_fragment(self, text: str) -> bool:
+        trimmed = text.strip()
+        if not trimmed:
+            return False
+        return _WEAK_FRAGMENT_RE.fullmatch(trimmed) is not None
 
     def _emit_message(self, text: str, events: list[dict]) -> None:
         if not text:

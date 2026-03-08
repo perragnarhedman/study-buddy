@@ -53,6 +53,7 @@ async def _install_deterministic_coach() -> None:
 
     async def deterministic_coach_decide(**kwargs) -> CoachDecision:
         user_message = str(kwargs.get("user_message") or "")
+        user_message_lower = user_message.lower()
         plan_items_json = str(kwargs.get("plan_items_json") or "[]")
         selected: Optional[str] = None
         mark_done: Optional[str] = None
@@ -62,6 +63,10 @@ async def _install_deterministic_coach() -> None:
             selected = None
         elif _is_ack(user_message):
             # Intentionally drop selection to test server ack rails.
+            selected = None
+        elif "appears off-scope" in user_message_lower:
+            selected = None
+        elif "likely answering your previous question" in user_message_lower:
             selected = None
         else:
             try:

@@ -18,6 +18,7 @@ final class AppStore: ObservableObject {
     private let sessionTokenKey = "studybuddy.sessionToken"
     private let apiClientFactory: (String) -> ChatAPIClient
     private let sessionTokenProvider: () -> String?
+    private var coalescedStreamMessageIDs: Set<String> = []
     var sessionToken: String? { sessionTokenProvider() }
 
     init(
@@ -150,6 +151,7 @@ final class AppStore: ObservableObject {
         chatErrorMessage = nil
         chatInfoMessage = nil
         isAssistantTyping = true
+        coalescedStreamMessageIDs = []
 
         if useStubData {
             let resp = Self.stubChatResponse(for: trimmed)
@@ -204,6 +206,11 @@ final class AppStore: ObservableObject {
     func appendMessageDelta(id: String, delta: String) {
         guard let idx = messages.firstIndex(where: { $0.id == id }) else { return }
         messages[idx].text += delta
+    }
+
+    private func removeMessage(id: String) {
+        guard let idx = messages.firstIndex(where: { $0.id == id }) else { return }
+        messages.remove(at: idx)
     }
 
     private func appendAssistantMessage(id: String = UUID().uuidString, text: String) {
@@ -276,24 +283,42 @@ final class AppStore: ObservableObject {
 
             case .messageStarted:
                 guard let messageId = event.messageId else { continue }
+                coalescedStreamMessageIDs.remove(messageId)
                 appendAssistantMessage(id: messageId, text: "")
                 isAssistantTyping = false
 
             case .messageDelta:
                 guard let messageId = event.messageId, let delta = event.delta else { continue }
+                if coalescedStreamMessageIDs.contains(messageId) {
+                    appendDeltaToLatestAssistant(delta)
+                    isAssistantTyping = false
+                    continue
+                }
+                if shouldCoalesceStreamFragment(messageId: messageId, delta: delta) {
+                    coalescedStreamMessageIDs.insert(messageId)
+                    appendDeltaToLatestAssistant(delta)
+                    removeMessage(id: messageId)
+                    isAssistantTyping = false
+                    continue
+                }
                 appendMessageDelta(id: messageId, delta: delta)
                 isAssistantTyping = false
 
             case .messageCompleted:
+                if let messageId = event.messageId {
+                    coalescedStreamMessageIDs.remove(messageId)
+                }
                 isAssistantTyping = true
 
             case .bestNextAction:
                 bestNextActionFromChat = event.bestNextAction
 
             case .turnCompleted:
+                coalescedStreamMessageIDs.removeAll()
                 isAssistantTyping = false
 
             case .error:
+                coalescedStreamMessageIDs.removeAll()
                 isAssistantTyping = false
                 if let message = event.message, !message.isEmpty {
                     throw APIError.badRequest(message)
@@ -316,9 +341,9 @@ final class AppStore: ObservableObject {
         if let openerSplit = splitShortOpener(first) {
             var segmented = [openerSplit.0, openerSplit.1]
             segmented.append(contentsOf: parts.dropFirst())
-            return segmented
+            return mergeWeakAssistantSegments(segmented)
         }
-        return parts
+        return mergeWeakAssistantSegments(parts)
     }
 
     private func splitShortOpener(_ text: String) -> (String, String)? {
@@ -344,6 +369,38 @@ final class AppStore: ObservableObject {
         }
 
         return nil
+    }
+
+    private func mergeWeakAssistantSegments(_ parts: [String]) -> [String] {
+        var merged: [String] = []
+        for part in parts {
+            let trimmed = part.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { continue }
+            if isWeakAssistantFragment(trimmed), !merged.isEmpty {
+                merged[merged.count - 1] += trimmed
+            } else {
+                merged.append(trimmed)
+            }
+        }
+        return merged
+    }
+
+    private func isWeakAssistantFragment(_ text: String) -> Bool {
+        guard !text.isEmpty, text.count <= 6 else { return false }
+        let allowed = CharacterSet(charactersIn: ")]}\"'»”’.,:;!?…-")
+        return text.unicodeScalars.allSatisfy { allowed.contains($0) }
+    }
+
+    private func appendDeltaToLatestAssistant(_ delta: String) {
+        guard let idx = messages.lastIndex(where: { $0.role == .assistant }) else { return }
+        messages[idx].text += delta
+    }
+
+    private func shouldCoalesceStreamFragment(messageId: String, delta: String) -> Bool {
+        guard let idx = messages.firstIndex(where: { $0.id == messageId }) else { return false }
+        guard messages[idx].role == .assistant, messages[idx].text.isEmpty else { return false }
+        guard isWeakAssistantFragment(delta.trimmingCharacters(in: .whitespacesAndNewlines)) else { return false }
+        return messages[..<idx].contains(where: { $0.role == .assistant && !$0.text.isEmpty })
     }
 
     var bestNextAction: PlanItem? {

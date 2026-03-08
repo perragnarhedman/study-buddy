@@ -53,14 +53,17 @@ class PreparedChatContext:
     assignments_by_id: dict[str, Any]
     assignment_status_map: dict[str, str]
     candidates: list[dict]
+    reference_assignments: list[dict]
     last_selected_plan_item_id: str | None
     last_selected_assignment_id: str | None
     ack: bool
+    short_followup: bool
     lang_hint: str
     conversation_history: str
     conversation_summary: str
     user_state_obj: dict[str, Any]
     user_state_json: str
+    runtime_notes: list[str]
     export_source: dict[str, Any]
 
 def _sanitize_user_only_summary(summary: str) -> str:
@@ -186,6 +189,84 @@ def _is_specific_task_request(text: str) -> bool:
         ]
     )
 
+
+def _last_assistant_text(history: list[dict[str, Any]]) -> str:
+    for item in reversed(history):
+        if item.get("role") == "assistant":
+            text = item.get("text")
+            if isinstance(text, str):
+                return text.strip()
+    return ""
+
+
+def _looks_like_short_followup_answer(*, user_text: str, last_assistant_text: str) -> bool:
+    ut = (user_text or "").strip()
+    if not ut or _is_overview_request(ut) or _is_specific_task_request(ut):
+        return False
+    if len(ut) > 40 or len(ut.split()) > 4:
+        return False
+    lat = (last_assistant_text or "").strip().lower()
+    if "?" not in lat:
+        return False
+    return any(
+        marker in lat
+        for marker in [
+            "vilken",
+            "vad",
+            "which",
+            "what",
+            "eller",
+            " or ",
+            "vill du",
+            "do you want",
+            "focus on",
+        ]
+    )
+
+
+def _is_likely_off_scope_request(text: str) -> bool:
+    t = (text or "").strip().lower()
+    if not t:
+        return False
+    assignment_anchors = [
+        "assignment",
+        "classroom",
+        "homework",
+        "uppgift",
+        "läxa",
+        "laxa",
+        "teacher",
+        "lärare",
+        "larare",
+        "upload",
+        "uploaded",
+        "paste",
+        "klistra in",
+    ]
+    if any(anchor in t for anchor in assignment_anchors):
+        return False
+    off_scope_markers = [
+        "generate an image",
+        "create an image",
+        "make an image",
+        "genera en bild",
+        "generera en bild",
+        "skapa en bild",
+        "mello",
+        "melodifestival",
+        "måns zelmerlöw",
+        "mans zelmerlow",
+        "carola",
+        "what does fuck mean",
+        "vad betyder fuck",
+        "svordom",
+        "swear word",
+        "curse word",
+        "who won",
+        "vem vann",
+    ]
+    return any(marker in t for marker in off_scope_markers)
+
 def _update_rolling_summary(prev: str, user_text: str, assistant_text: str, *, max_chars: int = 1200) -> str:
     """
     Rolling summary used as *optional* context for the coach prompt.
@@ -270,6 +351,14 @@ async def _prepare_chat_context(
     else:
         candidate_assignments = base_assignments[:12]
 
+    reference_pool: list[Any] = []
+    if last_selected_assignment_id and last_selected_assignment_id in assignments_by_id:
+        reference_pool.append(assignments_by_id[last_selected_assignment_id])
+    reference_pool.extend(a for a in assignments if assignment_status_map.get(a.id) == "done")
+    seen_reference_ids: set[str] = set()
+    reference_assignments: list[dict] = []
+    active_candidate_ids = {a.id for a in candidate_assignments}
+
     candidates: list[dict] = []
     for a in candidate_assignments:
         desc = ""
@@ -306,8 +395,32 @@ async def _prepare_chat_context(
             }
         )
 
+    for a in reference_pool:
+        if a.id in active_candidate_ids or a.id in seen_reference_ids:
+            continue
+        seen_reference_ids.add(a.id)
+        desc = ""
+        if isinstance(a.description, str):
+            desc = a.description.strip()[:1000]
+        reference_assignments.append(
+            {
+                "id": a.id,
+                "title": a.title,
+                "courseName": a.courseName,
+                "dueDate": a.dueDate,
+                "estimatedMinutes": a.estimatedMinutes,
+                "description": desc,
+                "url": a.url,
+                "status": assignment_status_map.get(a.id, "todo"),
+                "is_last_selected": bool(last_selected_assignment_id and a.id == last_selected_assignment_id),
+            }
+        )
+        if len(reference_assignments) >= 12:
+            break
+
     hist = get_chat_history(user_id=user_id, limit=10)
     conversation_history = "\n".join([f"{h['role']}: {h['text']}" for h in hist])
+    last_assistant_text = _last_assistant_text(hist)
     user_state_obj = get_user_state(user_id=user_id)
     conversation_summary = _sanitize_user_only_summary(str(user_state_obj.get("conversation_summary") or ""))
     if conversation_summary:
@@ -315,6 +428,19 @@ async def _prepare_chat_context(
     else:
         user_state_obj.pop("conversation_summary", None)
     user_state_json = json.dumps(user_state_obj, ensure_ascii=False)
+    short_followup = _looks_like_short_followup_answer(
+        user_text=user_text,
+        last_assistant_text=last_assistant_text,
+    )
+    runtime_notes: list[str] = []
+    if _is_likely_off_scope_request(user_text):
+        runtime_notes.append(
+            "The student's latest request appears off-scope unless it is clearly tied to an assignment in the active candidates, the reference assignments, or pasted/uploaded assignment instructions. If it is not tied to homework, politely refuse and redirect them back to Classroom or pasted/uploaded assignment text."
+        )
+    if short_followup:
+        runtime_notes.append(
+            "The student's latest message is likely answering your previous question. Continue the same thread. Do not restart with a new greeting and do not switch back to a general assignment overview unless the student explicitly asks for one."
+        )
 
     return PreparedChatContext(
         user_id=user_id,
@@ -323,14 +449,17 @@ async def _prepare_chat_context(
         assignments_by_id=assignments_by_id,
         assignment_status_map=assignment_status_map,
         candidates=candidates,
+        reference_assignments=reference_assignments,
         last_selected_plan_item_id=last_selected_plan_item_id,
         last_selected_assignment_id=last_selected_assignment_id,
         ack=ack,
+        short_followup=short_followup,
         lang_hint=lang_hint,
         conversation_history=conversation_history,
         conversation_summary=conversation_summary,
         user_state_obj=user_state_obj,
         user_state_json=user_state_json,
+        runtime_notes=runtime_notes,
         export_source=export_source,
     )
 
@@ -406,8 +535,10 @@ def _build_debug_export_payload(
             "conversation_summary": prepared.conversation_summary,
             "user_state": prepared.user_state_obj,
             "candidates": prepared.candidates,
+            "reference_assignments": prepared.reference_assignments,
             "last_selected_assignment_id": prepared.last_selected_assignment_id,
             "last_selected_plan_item_id": prepared.last_selected_plan_item_id,
+            "runtime_notes": prepared.runtime_notes,
         },
         "model": {"attempts": attempts},
         "response": {
@@ -429,6 +560,8 @@ def _model_user_message(prepared: PreparedChatContext, *, extra_note: str = "") 
     msg = prepared.user_text if not extra_note else f"{prepared.user_text}\n\nNOTE: {extra_note}"
     if prepared.ack and (prepared.last_selected_assignment_id or prepared.last_selected_plan_item_id):
         msg = f"{msg}\n\nNOTE: The student is acknowledging your previous suggestion. Continue the same task/thread; do not switch subjects."
+    for note in prepared.runtime_notes:
+        msg = f"{msg}\n\nNOTE: {note}"
     return msg
 
 
@@ -437,6 +570,7 @@ def _attempt_entry(prepared: PreparedChatContext, *, extra_note: str = "") -> di
     prompt = build_coach_prompt(
         user_message=msg,
         plan_items_json=json.dumps(prepared.candidates, ensure_ascii=False),
+        reference_assignments_json=json.dumps(prepared.reference_assignments, ensure_ascii=False),
         conversation_history=prepared.conversation_history,
         conversation_summary=prepared.conversation_summary,
         user_state_json=prepared.user_state_json,
@@ -683,6 +817,7 @@ async def _chat_send_impl(
             decision, raw = await coach_decide_with_raw(
                 user_message=attempt["user_message_to_model"],
                 plan_items_json=json.dumps(prepared.candidates, ensure_ascii=False),
+                reference_assignments_json=json.dumps(prepared.reference_assignments, ensure_ascii=False),
                 conversation_history=prepared.conversation_history,
                 conversation_summary=prepared.conversation_summary,
                 user_state_json=prepared.user_state_json,
@@ -693,6 +828,7 @@ async def _chat_send_impl(
         return await coach_decide(
             user_message=attempt["user_message_to_model"],
             plan_items_json=json.dumps(prepared.candidates, ensure_ascii=False),
+            reference_assignments_json=json.dumps(prepared.reference_assignments, ensure_ascii=False),
             conversation_history=prepared.conversation_history,
             conversation_summary=prepared.conversation_summary,
             user_state_json=prepared.user_state_json,
@@ -771,6 +907,7 @@ async def chat_send_stream(
             async for event in coach_stream_raw_events(
                 user_message=attempt["user_message_to_model"],
                 plan_items_json=json.dumps(prepared.candidates, ensure_ascii=False),
+                reference_assignments_json=json.dumps(prepared.reference_assignments, ensure_ascii=False),
                 conversation_history=prepared.conversation_history,
                 conversation_summary=prepared.conversation_summary,
                 user_state_json=prepared.user_state_json,

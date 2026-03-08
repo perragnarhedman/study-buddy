@@ -74,6 +74,72 @@ final class AppStoreChatStreamingTests: XCTestCase {
         XCTAssertNil(store.chatErrorMessage)
         XCTAssertEqual(api.sendChatCalls.count, 1)
     }
+
+    func testSendUserMessageFallbackMergesWeakPunctuationSegment() async {
+        let fallbackResponse = ChatSendResponse(
+            assistantMessage: ChatMessage(
+                id: "assistant",
+                role: .assistant,
+                text: "Jag kan inte kolla det säkert här.\n\n).\n\nMen om du menar resultatet kan jag inte bekräfta det.",
+                timestamp: "t"
+            ),
+            bestNextAction: nil
+        )
+        let api = MockChatAPIClient(
+            streamError: APIError.serviceUnavailable,
+            fallbackResponse: fallbackResponse
+        )
+        let store = AppStore(
+            apiClientFactory: { _ in api },
+            sessionTokenProvider: { nil }
+        )
+        store.useStubData = false
+
+        await store.sendUserMessage("Hej")
+
+        XCTAssertEqual(
+            store.messages.map(\.text),
+            [
+                "Hej",
+                "Jag kan inte kolla det säkert här.).",
+                "Men om du menar resultatet kan jag inte bekräfta det.",
+            ]
+        )
+    }
+
+    func testSendUserMessageCoalescesWeakPunctuationStreamBubble() async {
+        let api = MockChatAPIClient(
+            streamEvents: [
+                .init(type: .typingStarted, messageId: nil, delta: nil, bestNextAction: nil, message: nil),
+                .init(type: .messageStarted, messageId: "a1", delta: nil, bestNextAction: nil, message: nil),
+                .init(type: .messageDelta, messageId: "a1", delta: "Jag kan inte kolla det säkert här.", bestNextAction: nil, message: nil),
+                .init(type: .messageCompleted, messageId: "a1", delta: nil, bestNextAction: nil, message: nil),
+                .init(type: .messageStarted, messageId: "a2", delta: nil, bestNextAction: nil, message: nil),
+                .init(type: .messageDelta, messageId: "a2", delta: ").", bestNextAction: nil, message: nil),
+                .init(type: .messageCompleted, messageId: "a2", delta: nil, bestNextAction: nil, message: nil),
+                .init(type: .messageStarted, messageId: "a3", delta: nil, bestNextAction: nil, message: nil),
+                .init(type: .messageDelta, messageId: "a3", delta: "Men om du menar resultatet kan jag inte bekräfta det.", bestNextAction: nil, message: nil),
+                .init(type: .messageCompleted, messageId: "a3", delta: nil, bestNextAction: nil, message: nil),
+                .init(type: .turnCompleted, messageId: nil, delta: nil, bestNextAction: nil, message: nil),
+            ]
+        )
+        let store = AppStore(
+            apiClientFactory: { _ in api },
+            sessionTokenProvider: { nil }
+        )
+        store.useStubData = false
+
+        await store.sendUserMessage("Hej")
+
+        XCTAssertEqual(
+            store.messages.map(\.text),
+            [
+                "Hej",
+                "Jag kan inte kolla det säkert här.).",
+                "Men om du menar resultatet kan jag inte bekräfta det.",
+            ]
+        )
+    }
 }
 
 private final class MockChatAPIClient: ChatAPIClient {

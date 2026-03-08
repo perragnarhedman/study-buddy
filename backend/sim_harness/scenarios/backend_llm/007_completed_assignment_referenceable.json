@@ -1,0 +1,17 @@
+{
+  "scenario_id": "bllm-007",
+  "title": "Backend LLM: completed assignment can still be discussed without being re-selected",
+  "language": "sv",
+  "constraints": { "max_turns": 1 },
+  "assignments": [
+    { "id": "a-done", "title": "Engelska: skrivuppgift", "courseName": "English", "dueDate": null, "description": "Skriv en text med introduction, body och analysis.", "estimatedMinutes": 45, "status": "done" },
+    { "id": "a-todo", "title": "Matte: algebra", "courseName": "Math", "dueDate": null, "description": "Uppgifter 1-10.", "estimatedMinutes": 30, "status": "todo" }
+  ],
+  "initial_user_message": "Jag hade engelska och har glömt en deluppgift. Kan du visa uppgiften igen?",
+  "expected": {
+    "require_no_selection": true,
+    "expected_reply_language": "sv",
+    "forbidden_selected_assignment_ids": ["a-done"],
+    "assistant_text_must_contain": ["engelska"]
+  }
+}

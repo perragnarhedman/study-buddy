@@ -143,6 +143,7 @@ async def coach_decide(
     *,
     user_message: str,
     plan_items_json: str,
+    reference_assignments_json: str = "[]",
     conversation_history: str = "",
     conversation_summary: str = "",
     user_state_json: str = "",
@@ -150,6 +151,7 @@ async def coach_decide(
     decision, _raw = await coach_decide_with_raw(
         user_message=user_message,
         plan_items_json=plan_items_json,
+        reference_assignments_json=reference_assignments_json,
         conversation_history=conversation_history,
         conversation_summary=conversation_summary,
         user_state_json=user_state_json,
@@ -161,6 +163,7 @@ async def coach_decide_with_raw(
     *,
     user_message: str,
     plan_items_json: str,
+    reference_assignments_json: str = "[]",
     conversation_history: str = "",
     conversation_summary: str = "",
     user_state_json: str = "",
@@ -180,6 +183,7 @@ async def coach_decide_with_raw(
         {
             "user_message": user_message,
             "plan_items_json": plan_items_json,
+            "reference_assignments_json": reference_assignments_json,
             "conversation_history": conversation_history,
             "conversation_summary": conversation_summary,
             "user_state_json": user_state_json,
@@ -201,6 +205,7 @@ def build_coach_prompt(
     *,
     user_message: str,
     plan_items_json: str,
+    reference_assignments_json: str = "[]",
     conversation_history: str = "",
     conversation_summary: str = "",
     user_state_json: str = "",
@@ -212,6 +217,7 @@ def build_coach_prompt(
         {
             "user_message": user_message,
             "plan_items_json": plan_items_json,
+            "reference_assignments_json": reference_assignments_json,
             "conversation_history": conversation_history,
             "conversation_summary": conversation_summary,
             "user_state_json": user_state_json,
@@ -224,6 +230,7 @@ async def coach_stream_raw_events(
     *,
     user_message: str,
     plan_items_json: str,
+    reference_assignments_json: str = "[]",
     conversation_history: str = "",
     conversation_summary: str = "",
     user_state_json: str = "",
@@ -235,6 +242,7 @@ async def coach_stream_raw_events(
     prompt = build_coach_prompt(
         user_message=user_message,
         plan_items_json=plan_items_json,
+        reference_assignments_json=reference_assignments_json,
         conversation_history=conversation_history,
         conversation_summary=conversation_summary,
         user_state_json=user_state_json,

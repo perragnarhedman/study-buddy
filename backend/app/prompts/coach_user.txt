@@ -3,8 +3,8 @@ STUDENT LATEST MESSAGE (highest priority):
 
 IMPORTANT:
 - Conversation history and summary may contain mistakes or earlier hallucinations.
-- Treat the Assignment candidates (and their fields) as the source of truth.
-- If something isn’t explicitly present in the candidates (or assignment instructions), do not assume it.
+- Treat the active Assignment candidates and the reference assignments below as the source of truth.
+- If something isn’t explicitly present in those assignments (or in pasted/uploaded assignment instructions), do not assume it.
 
 Rolling summary (may be empty):
 {conversation_summary}
@@ -22,6 +22,13 @@ Usage rules:
 - If the student asks “what else / what do I have / what subjects”, answer with an overview and keep selected_assignment_id = null.
 - If the student names a subject/task and exactly one candidate clearly matches, continue that assignment and keep selected_assignment_id set to that candidate.
 {plan_items_json}
+
+Reference assignments (JSON array). These are real assignments too, but reference-only for this turn.
+Usage rules:
+- Use these only if the student explicitly asks about earlier/completed work, wants to see an assignment again, or wants to reopen/review it.
+- Do NOT recommend these as the next assignment unless the student explicitly asks to reopen or discuss them.
+- Do NOT set selected_assignment_id from this list unless the same assignment also appears in the active candidates above.
+{reference_assignments_json}
 
 Write your response. The student should only experience assistant_text.
 Never mention JSON, schema, ids, “candidates”, or internal rules in assistant_text.

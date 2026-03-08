@@ -1,0 +1,18 @@
+{
+  "scenario_id": "int-004",
+  "title": "Integration: short follow-up answer should continue the prior thread",
+  "language": "sv",
+  "constraints": { "max_turns": 3 },
+  "assignments": [
+    { "id": "a1", "title": "Historia: frågor", "courseName": "History", "dueDate": null, "description": "Svara på frågorna 1-10.", "estimatedMinutes": 30 }
+  ],
+  "user_messages": [
+    "Jag har en engelska uppgift om ett moraliskt problem.",
+    "Mobbning.",
+    "Skolan"
+  ],
+  "expected": {
+    "require_no_selection": true,
+    "expected_reply_language": "sv"
+  }
+}
