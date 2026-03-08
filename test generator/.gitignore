@@ -1,0 +1,7 @@
+.env.local
+tokens/
+drafts/
+runs/
+uploads/
+*.sqlite3
+*.sqlite3-*
