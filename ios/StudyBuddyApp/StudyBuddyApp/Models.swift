@@ -53,6 +53,32 @@ struct ChatSendResponse: Codable {
     }
 }
 
+struct ChatStreamEvent: Codable {
+    let type: EventType
+    let messageId: String?
+    let delta: String?
+    let bestNextAction: PlanItem?
+    let message: String?
+
+    enum EventType: String, Codable {
+        case typingStarted = "typing_started"
+        case messageStarted = "message_started"
+        case messageDelta = "message_delta"
+        case messageCompleted = "message_completed"
+        case bestNextAction = "best_next_action"
+        case turnCompleted = "turn_completed"
+        case error
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case type
+        case messageId = "message_id"
+        case delta
+        case bestNextAction = "best_next_action"
+        case message
+    }
+}
+
 struct Assignment: Codable, Equatable {
     let id: String
     let title: String

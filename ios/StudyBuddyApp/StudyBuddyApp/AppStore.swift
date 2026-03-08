@@ -13,6 +13,7 @@ final class AppStore: ObservableObject {
     @Published var chatErrorMessage: String? = nil
     @Published var chatInfoMessage: String? = nil
     @Published var authErrorMessage: String? = nil
+    @Published var isAssistantTyping: Bool = false
 
     private let sessionTokenKey = "studybuddy.sessionToken"
     var sessionToken: String? { Keychain.getString(forKey: sessionTokenKey) }
@@ -75,6 +76,7 @@ final class AppStore: ObservableObject {
             bestNextActionFromChat = nil
             chatErrorMessage = nil
             chatInfoMessage = "Conversation reset."
+            isAssistantTyping = false
             return
         }
         do {
@@ -83,6 +85,7 @@ final class AppStore: ObservableObject {
             bestNextActionFromChat = nil
             chatErrorMessage = nil
             chatInfoMessage = "Conversation reset."
+            isAssistantTyping = false
         } catch {
             if let apiError = error as? APIError, case .unauthorized = apiError {
                 authErrorMessage = "Please sign in to use Study Buddy."
@@ -133,52 +136,46 @@ final class AppStore: ObservableObject {
             timestamp: Self.isoNow()
         )
         messages.append(userMsg)
-
-        // Create placeholder assistant message (streaming-ready: update by id later).
-        let assistantId = UUID().uuidString
-        messages.append(
-            ChatMessage(
-                id: assistantId,
-                role: .assistant,
-                text: "Thinking…",
-                timestamp: Self.isoNow()
-            )
-        )
+        chatErrorMessage = nil
+        chatInfoMessage = nil
+        isAssistantTyping = true
 
         if useStubData {
             let resp = Self.stubChatResponse(for: trimmed)
-            updateMessageText(id: assistantId, newText: resp.assistantMessage.text)
+            appendAssistantReplyText(resp.assistantMessage.text)
             bestNextActionFromChat = resp.bestNextAction
             chatErrorMessage = nil
+            isAssistantTyping = false
             return
         }
 
+        let assistantCountBefore = messages.filter { $0.role == .assistant }.count
+
         do {
-            let resp = try await api.sendChat(userMessage: trimmed, sessionToken: sessionToken)
-            updateMessageText(id: assistantId, newText: resp.assistantMessage.text)
-            bestNextActionFromChat = resp.bestNextAction
+            try await consumeChatStream(
+                api.sendChatStream(userMessage: trimmed, sessionToken: sessionToken)
+            )
             chatErrorMessage = nil
             authErrorMessage = nil
-        } catch {
-            bestNextActionFromChat = nil
-            if let apiError = error as? APIError, case .serviceUnavailable = apiError {
-                chatErrorMessage = "Coach service unavailable (OpenAI)."
-                updateMessageText(id: assistantId, newText: "Coach service unavailable right now (OpenAI).")
-            } else if let apiError = error as? APIError, case .badRequest(let detail) = apiError {
-                chatErrorMessage = "Chat request was invalid."
-                let short = detail.isEmpty ? "" : "\n\nDetails: \(detail)"
-                updateMessageText(id: assistantId, newText: "I couldn’t send that.\(short)")
-            } else if let apiError = error as? APIError, case .unauthorized = apiError {
-                authErrorMessage = "Please sign in to use Study Buddy."
-                chatErrorMessage = "Please sign in (Settings → Connect Google Classroom)."
-                updateMessageText(id: assistantId, newText: "Please sign in to continue (Settings → Connect Google Classroom).")
-            } else if let apiError = error as? APIError, case .badStatus(let code) = apiError {
-                chatErrorMessage = "Backend returned an error (\(code))."
-                updateMessageText(id: assistantId, newText: "Backend returned an error (\(code)).")
-            } else {
-                chatErrorMessage = "Could not reach backend."
-                updateMessageText(id: assistantId, newText: "Could not reach backend.")
+        } catch let streamError {
+            let hasAssistantContent = messages.filter { $0.role == .assistant }.count > assistantCountBefore
+
+            if !hasAssistantContent {
+                do {
+                    let fallback = try await api.sendChat(userMessage: trimmed, sessionToken: sessionToken)
+                    bestNextActionFromChat = fallback.bestNextAction
+                    appendAssistantReplyText(fallback.assistantMessage.text)
+                    chatErrorMessage = nil
+                    authErrorMessage = nil
+                    isAssistantTyping = false
+                    return
+                } catch {
+                    handleChatFailure(error, assistantCountBefore: assistantCountBefore)
+                    return
+                }
             }
+
+            handleChatFailure(streamError, assistantCountBefore: assistantCountBefore)
         }
     }
 
@@ -191,6 +188,151 @@ final class AppStore: ObservableObject {
     func updateMessageText(id: String, newText: String) {
         guard let idx = messages.firstIndex(where: { $0.id == id }) else { return }
         messages[idx].text = newText
+    }
+
+    func appendMessageDelta(id: String, delta: String) {
+        guard let idx = messages.firstIndex(where: { $0.id == id }) else { return }
+        messages[idx].text += delta
+    }
+
+    private func appendAssistantMessage(id: String = UUID().uuidString, text: String) {
+        messages.append(
+            ChatMessage(
+                id: id,
+                role: .assistant,
+                text: text,
+                timestamp: Self.isoNow()
+            )
+        )
+    }
+
+    private func appendAssistantErrorIfNeeded(_ text: String, assistantCountBefore: Int) {
+        if messages.filter({ $0.role == .assistant }).count == assistantCountBefore {
+            appendAssistantMessage(text: text)
+        }
+    }
+
+    private func appendAssistantReplyText(_ text: String) {
+        for part in segmentedAssistantMessages(from: text) {
+            appendAssistantMessage(text: part)
+        }
+    }
+
+    private func handleChatFailure(_ error: Error, assistantCountBefore: Int) {
+        bestNextActionFromChat = nil
+        isAssistantTyping = false
+
+        if let apiError = error as? APIError, case .serviceUnavailable = apiError {
+            chatErrorMessage = "Coach service unavailable (OpenAI)."
+            appendAssistantErrorIfNeeded(
+                "Coach service unavailable right now (OpenAI).",
+                assistantCountBefore: assistantCountBefore
+            )
+        } else if let apiError = error as? APIError, case .badRequest(let detail) = apiError {
+            chatErrorMessage = "Chat request was invalid."
+            let short = detail.isEmpty ? "" : "\n\nDetails: \(detail)"
+            appendAssistantErrorIfNeeded(
+                "I couldn’t send that.\(short)",
+                assistantCountBefore: assistantCountBefore
+            )
+        } else if let apiError = error as? APIError, case .unauthorized = apiError {
+            authErrorMessage = "Please sign in to use Study Buddy."
+            chatErrorMessage = "Please sign in (Settings → Connect Google Classroom)."
+            appendAssistantErrorIfNeeded(
+                "Please sign in to continue (Settings → Connect Google Classroom).",
+                assistantCountBefore: assistantCountBefore
+            )
+        } else if let apiError = error as? APIError, case .badStatus(let code) = apiError {
+            chatErrorMessage = "Backend returned an error (\(code))."
+            appendAssistantErrorIfNeeded(
+                "Backend returned an error (\(code)).",
+                assistantCountBefore: assistantCountBefore
+            )
+        } else {
+            chatErrorMessage = "Could not reach backend."
+            appendAssistantErrorIfNeeded(
+                "Could not reach backend.",
+                assistantCountBefore: assistantCountBefore
+            )
+        }
+    }
+
+    private func consumeChatStream(_ stream: AsyncThrowingStream<ChatStreamEvent, Error>) async throws {
+        for try await event in stream {
+            switch event.type {
+            case .typingStarted:
+                isAssistantTyping = true
+
+            case .messageStarted:
+                guard let messageId = event.messageId else { continue }
+                appendAssistantMessage(id: messageId, text: "")
+                isAssistantTyping = false
+
+            case .messageDelta:
+                guard let messageId = event.messageId, let delta = event.delta else { continue }
+                appendMessageDelta(id: messageId, delta: delta)
+                isAssistantTyping = false
+
+            case .messageCompleted:
+                isAssistantTyping = true
+
+            case .bestNextAction:
+                bestNextActionFromChat = event.bestNextAction
+
+            case .turnCompleted:
+                isAssistantTyping = false
+
+            case .error:
+                isAssistantTyping = false
+                if let message = event.message, !message.isEmpty {
+                    throw APIError.badRequest(message)
+                }
+                throw APIError.badStatus(-1)
+            }
+        }
+    }
+
+    private func segmentedAssistantMessages(from text: String) -> [String] {
+        let normalized = text.replacingOccurrences(of: "\r\n", with: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalized.isEmpty else { return [] }
+
+        var parts = normalized
+            .components(separatedBy: "\n\n")
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+
+        guard let first = parts.first else { return [] }
+        if let openerSplit = splitShortOpener(first) {
+            var segmented = [openerSplit.0, openerSplit.1]
+            segmented.append(contentsOf: parts.dropFirst())
+            return segmented
+        }
+        return parts
+    }
+
+    private func splitShortOpener(_ text: String) -> (String, String)? {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+
+        var idx = trimmed.startIndex
+        var count = 0
+        while idx < trimmed.endIndex, count < 40 {
+            let ch = trimmed[idx]
+            if ch == "." || ch == "!" || ch == "?" {
+                let next = trimmed.index(after: idx)
+                let remainder = String(trimmed[next...]).trimmingCharacters(in: .whitespacesAndNewlines)
+                let opener = String(trimmed[..<next]).trimmingCharacters(in: .whitespacesAndNewlines)
+                if !opener.isEmpty,
+                   !remainder.isEmpty,
+                   remainder.rangeOfCharacter(from: .uppercaseLetters)?.lowerBound == remainder.startIndex {
+                    return (opener, remainder)
+                }
+            }
+            idx = trimmed.index(after: idx)
+            count += 1
+        }
+
+        return nil
     }
 
     var bestNextAction: PlanItem? {

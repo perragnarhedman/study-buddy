@@ -57,6 +57,50 @@ final class APIClient {
         return decoded
     }
 
+    func sendChatStream(userMessage: String, sessionToken: String?) -> AsyncThrowingStream<ChatStreamEvent, Error> {
+        AsyncThrowingStream { continuation in
+            var task: Task<Void, Never>?
+
+            task = Task {
+                do {
+                    let u = try self.url("chat/send_stream")
+                    var req = URLRequest(url: u)
+                    req.httpMethod = "POST"
+                    req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+                    if let token = sessionToken, !token.isEmpty {
+                        req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+                    }
+
+                    let payload = ChatSendRequest(userMessage: userMessage)
+                    req.httpBody = try JSONEncoder().encode(payload)
+
+                    let (bytes, resp) = try await URLSession.shared.bytes(for: req)
+                    guard let http = resp as? HTTPURLResponse else { throw APIError.badStatus(-1) }
+                    if http.statusCode == 503 { throw APIError.serviceUnavailable }
+                    if http.statusCode == 401 { throw APIError.unauthorized }
+                    guard (200..<300).contains(http.statusCode) else { throw APIError.badStatus(http.statusCode) }
+
+                    let decoder = JSONDecoder()
+                    for try await line in bytes.lines {
+                        let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+                        guard !trimmed.isEmpty else { continue }
+                        let data = Data(trimmed.utf8)
+                        let event = try decoder.decode(ChatStreamEvent.self, from: data)
+                        continuation.yield(event)
+                    }
+
+                    continuation.finish()
+                } catch {
+                    continuation.finish(throwing: error)
+                }
+            }
+
+            continuation.onTermination = { _ in
+                task?.cancel()
+            }
+        }
+    }
+
     func resetConversation(
         sessionToken: String?,
         clearAssignmentStatus: Bool = false,

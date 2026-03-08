@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 import re
+from typing import AsyncIterator
+
 import httpx
 
 from app.core.config import get_settings
@@ -59,6 +61,55 @@ async def _responses_text(*, model: str, prompt: str, timeout_seconds: float, ap
     if not texts:
         raise RuntimeError("OpenAI response missing text")
     return "\n".join(texts).strip()
+
+
+async def _responses_stream_events(
+    *, model: str, prompt: str, timeout_seconds: float, api_key: str
+) -> AsyncIterator[dict]:
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Accept": "text/event-stream",
+    }
+    payload = {
+        "model": model,
+        "input": prompt,
+        "stream": True,
+        "stream_options": {"include_obfuscation": False},
+    }
+    async with httpx.AsyncClient(timeout=timeout_seconds) as client:
+        async with client.stream(
+            "POST",
+            f"{OPENAI_BASE_URL}/responses",
+            json=payload,
+            headers=headers,
+        ) as response:
+            response.raise_for_status()
+
+            event_name: str | None = None
+            data_lines: list[str] = []
+
+            async for line in response.aiter_lines():
+                if line == "":
+                    if not data_lines:
+                        event_name = None
+                        continue
+                    data = "\n".join(data_lines).strip()
+                    data_lines = []
+                    if data == "[DONE]":
+                        break
+                    payload_obj = json.loads(data)
+                    if event_name and isinstance(payload_obj, dict) and "type" not in payload_obj:
+                        payload_obj["type"] = event_name
+                    yield payload_obj
+                    event_name = None
+                    continue
+
+                if line.startswith("event:"):
+                    event_name = line.partition(":")[2].strip()
+                    continue
+                if line.startswith("data:"):
+                    data_lines.append(line.partition(":")[2].lstrip())
+                    continue
 
 
 async def plan_week(assignments_json: str, week_start: str) -> str:
@@ -167,5 +218,34 @@ def build_coach_prompt(
         },
     )
     return f"{system_prompt}\n\n{user_prompt}\n"
+
+
+async def coach_stream_raw_events(
+    *,
+    user_message: str,
+    plan_items_json: str,
+    conversation_history: str = "",
+    conversation_summary: str = "",
+    user_state_json: str = "",
+) -> AsyncIterator[dict]:
+    settings = get_settings()
+    if not settings.openai_api_key:
+        raise RuntimeError("OPENAI_API_KEY missing")
+
+    prompt = build_coach_prompt(
+        user_message=user_message,
+        plan_items_json=plan_items_json,
+        conversation_history=conversation_history,
+        conversation_summary=conversation_summary,
+        user_state_json=user_state_json,
+    )
+
+    async for event in _responses_stream_events(
+        model=settings.openai_chat_model,
+        prompt=prompt,
+        timeout_seconds=settings.openai_chat_timeout_seconds,
+        api_key=settings.openai_api_key,
+    ):
+        yield event
 
 
